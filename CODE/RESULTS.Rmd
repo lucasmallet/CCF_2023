@@ -15,6 +15,8 @@ controls:
 alt+o = close all 
 shift+alt+o = open all
 
+ajout test
+
 dput(as.character(samples_missing_postscata)) # convert into the format c(x; y; ...; z)
 as.data.frame.matrix() # table to dataframe
 for ggplot: position = fill -> relative abundance 
