@@ -1,0 +1,2536 @@
+---
+title: "RESULTS"
+output: html_document
+date: "2023-03-08"
+editor_options: 
+  chunk_output_type: console
+---
+```{r KNITR global options: TO DO NOT INCLUDE}
+#| include = F
+ 
+knitr::opts_chunk$set(echo = F, include = F)
+```
+# *MEMOS*
+controls: 
+alt+o = close all 
+shift+alt+o = open all
+
+dput(as.character(samples_missing_postscata)) # convert into the format c(x; y; ...; z)
+as.data.frame.matrix() # table to dataframe
+for ggplot: position = fill -> relative abundance 
+
+DURBIN WATSON TEST:
+- Durbin Watson statistic is a test for autocorrelation in a regression model's output.
+- The DW statistic ranges from zero to four, with a value of 2.0 indicating zero autocorrelation. 
+Values below 2.0 mean there is positive autocorrelation and above 2.0 indicates negative autocorrelation
+- A rule of thumb is that DW test statistic values in the range of 1.5 to 2.5 are relatively normal
+significantly small p-value casts doubt on the validity of the null hypothesis and indicates autocorrelation among residuals.
+
+BREUSCH PAGAN TEST:
+- Null Hypothesis (H0): Homoscedasticity is present (the residuals are distributed with equal variance)
+- Alternative Hypothesis (HA): Heteroscedasticity is present (the residuals are not distributed with equal variance)
+
+FOR MODEL:
+-- Variables:
+- zone : fixed 
+- year : fixed
+- stream: fixed ? random ? 
+- orientation: random ? not considered ? 
+- plot: random 
+
+-- symbols:
++ : include
+- : delete
+: : interaction between variables
+* : variables + their interaction
+| : conditionning = X|Y -> include X given Y 
+1 : intercept (can be deleted)
+
+- Random intercept:
+m1 <- lmer(Reaction ~ Days + (1 | Subject), data = sleepstudy)
+
+- Random slope:
+m2 <- lmer(Reaction ~ Days + (0 + Days|Subject), data = sleepstudy)
+
+- Correlated random intercept and slope:
+m3 <- lmer(Reaction ~ Days + (1 + Days|Subject), data = sleepstudy)
+
+- Uncorrelated random intercept and slope:
+m4 <- lmer(Reaction ~ Days + (1|Subject) + (0 + Days|Subject),
+           data = sleepstudy)
+
+https://stats.stackexchange.com/questions/31569/questions-about-how-random-effects-are-specified-in-lmer
+for constructing model with random effects
+
+# *REMAINS TO DO* 
+- deciding about effect of variables (model -> stream + orientation + pool)
+-- find a way to compute samples together if no significance (knowing that if we pool samplings UP-LO N-S together, we need to do it for all of them for comparison)
+-- if significance from environmental variables : consider using them as explanatory variables.
+--- PCA and testing correlation
+
+-testing autocorrelation in plots (if we want to analyse them independantly)
+
+- venn pb (all common, nothing specific)
+- permanova/adonis
+- commenting ##
+- synthetic tab for MM 
+
+~~ 27/03/23
+
+- Automatic taxonomic attribution for the 3050 not manually IDed clusters. Using a local database (Soil Inventory 2012 - 2019) on computer and ID automatically Genus based on 90% threshold similarity for sequences. Use the closest match if this is >90%, otherwise => unknown
+  Then taxa-ecologic attribution with "FUNGuild-like" database directly into R. 
+  # You don’t have to use FUNGuild – species are already denoted as “ECM” in the Soil Inventory database (but if you use FUNGuild you should hopefully get the same output.
+
+
+- If sequencing depth of samples are even:
+  -- Rarefying OTU matrix by considering all 4050 OTU clusters. Apply rarefaction for the lowest number of reads (ie sequencing depth) for each sample. 
+ # Yes, and if you have some few samples with few reads, you may consider omitting these samples rather than rarefying all samples to a very low sequencing depth. Alternatively, you can skip rarefying and instead include sqrt(sequencing depth) as covariate in statistical models (but it is a bit more complicated to explain and interpret).
+  
+  -> But what about the really low number of reads in for some clusters among samples (especially clearcut where available DNA is low) ?
+- If not:
+  -- Doing model and : sqrt(reads)
+  # exactly, however fungal DNA is usually not so low on clearcuts (although it is mainly free-living fungi and not ECM).
+
+
+- Biais in FUNGuild to consider: "ECM" are far more studied and then so, when there is a matching attribution -> confident ; but for "SF (Saprophytic Fungi)", less sure. A lot of them are not identified as SF in database, even if they are, because of lacking studies. 
+  -> ECM and "others" (saprobes, root-associated, parasitic)
+  
+- Halasen edge study: spatial dependence among samples inside a same plot (distant from 7.5 meters from each other) but independence of others plots 
+  -> Should we consider the factor "plot" as random variable or just the concerned ones ? If so, how to do it ? GLMM, paidarkred-ANOVA ? 
+  # Yes, you should probably use ”plot” as a random variable in a GLMM.
+  
+-  to limit effect of dominant OTU (high nb of reads):
+Hellinger transformation is sqrt (reads of species / total reads in sample) ie sqrt (relative abudances)
+
+ - Zero oSCurence of OTUs or no reads in some samples -> leads to a biais:
+  -- considering the samples with 0 OTU counted: min richness = 0 & N(samples) unchanged -> good for design
+  
+  -- not considering them (ie erasing samples with 0 from dataset): min richness = 1 & N(samples) darkreduced -> no significant differences in mean comparison tests"
+
+Rarefaction
+Data.rar<-as.data.frame(rrarefy(data, min(rowSums(data))))
+ 
+Hellinger transformation
+
+data.hel<-as.data.frame(t(apply(data,1,function(x) sqrt(x/sum(x)))))
+ 
+For automatic ID you will have to make a local blast database (https://www.ncbi.nlm.nih.gov/books/NBK569841/). I do this on the Mykopat grid. Then you blast your sequences against this database, using a custom output format. This is what a script can look like if you run it on the Mykopat grid:
+ 
+$-l h_rt=24:0:0
+$-l h_vmem=1G
+$-m ae
+module load ncbi-blast+
+blastn –db local_databse -query query_sequences.fst -out Output_file.txt -remote -max_target_seqs 1 -outfmt "6 qseqid sseqid evalue pident"
+
+# to transform summary() into df 
+summary_ecm_df <- data.frame(unclass(summary(ecmtax_df)), check.names = FALSE, stringsAsFactors = FALSE)
+
+
+# *0 FUNCTIONS - PALETTES - TESTS* 
+```{r dummy graphs}
+list_mm <- lsf.str("package:MiscMetabar") 
+factor(list_mm)
+## to see all functions from a package
+
+# circles physeq
+circle_allsite_genus <- circle_pq(ecm_phy, "site", taxa = "Phylum", add_nb_seq = F,
+          grid_col = "darkgrey",
+          row_col = c("darkdarkred","#1F78B4","darkgreen"))
+
+sample_names(ecm_phy)
+```
+```{r test piechart}
+fortax <- data.frame(table(as.factor(ecm_phy@tax_table[,"Order"])))
+
+fortax <- fortax %>% 
+  group_by(Var1) %>% # Variable to be transformed
+  count() %>% 
+  ungroup() %>% 
+  mutate(perc = `Freq` / sum(`Freq`)) %>% 
+  arrange(perc) %>%
+  mutate(labels = scales::percent(perc))
+
+ggplot(fortax, aes(x ="", y = Freq, fill = Var1)) +
+  geom_bar(stat="identity", width=1) +
+  coord_polar("y", start=0)+
+  geom_text(aes(label = labels),
+            position = position_stack(vjust = 0.5))
+  
+```
+# *1 MM RESULTS*
+## DATA RUN
+```{r MM manuscript}
+# otu transformations
+otu_zero_na <- otu_fungi
+otu_zero_na[otu_zero_na==0] <- NA
+mean_rd_sample <- colSums(otu_fungi) %>% mean() %>% print()
+mean_rd_otu <- rowSums(otu_fungi) %>% mean() %>% print()
+
+## total nb of reads
+sum(otu_all) # total sum (all sites)
+sum(otu_fungi_all) # only fungi (all sites)
+sum(otu_fungi) # + hala
+sum(otu_001) #  + <1% deleted # a lot because : most of OTUs have just a few reads. then, <1% of relative abundance per sample = deletion
+sum(otu_rarefied) # + rarefaction
+rd_del <- (sum(otu_fungi) - sum(otu_001)) %>% print()
+raref_loss <- (sum(otu_001) - sum(otu_rarefied)) %>% print()
+
+## loss of clusters 
+nrow(otu_all) # total clusters (all sites)
+nrow(otu_samples_out) # fungi + clusters in control (all sites)
+nrow(otu_fungi_all) # fungi - clusters in control (all sites)
+nrow(otu_fungi)
+nrow(otu_001) #  + <1% deleted 
+nrow(otu_rarefied) # + rarefaction
+nrow(phy@otu_table)# + hala
+ndel <- (nrow(otu_fungi) - nrow(otu_001)) %>% print()
+
+plant_rd <-  (sum(otu_all) - sum(otu_fungi_all)) %>% print()
+plant_otu <- (nrow(otu_samples_out) - nrow(otu_fungi_all) - length(clusters_in_controls)) %>% print()
+clusters_in_controls  # clusters found in controls samples = suppressed
+length(clusters_in_controls) %>% print()
+
+## nb of taxa 
+### OTUs 
+summary(as.factor(taxeco1$ID_TYPE)) 
+manual_id <- sum(as.factor(taxeco1$ID_TYPE) == "MANUAL_ID")
+uncheck_otu <- sum(as.factor(taxeco1$ID_TYPE) == "AUTO_ID")
+na_otu <- sum(is.na(taxeco1$OTU_ID))
+auto_id <- uncheck_otu - na_otu
+
+## IN HALA :
+
+pourc_rd_hala <- (sum(otu_fungi)/sum(otu_fungi_all)*100) %>% print()
+
+nb_rd_del <- (sum(otu_fungi) - sum(otu_001)) %>% print()
+pourc_rd_del <- (sum(otu_001)/sum(otu_fungi)*100) %>% print()
+
+nb_otu_del <- (nrow(otu_fungi) - nrow(otu_001)) %>% print() 
+
+nrow(phy@tax_table)
+summary(as.factor(phy@tax_table[, "primary_lifestyle"]))
+# N OTU
+n_otu_ecm <- nrow(ecm_phy@tax_table) %>% print() # ECM
+n_otu_sapr<- nrow(sapr_phy@tax_table) %>% print() # SAPR
+n_otu_other <- nrow(other_phy@tax_table) %>% print() # OTHER 
+
+# N read
+nb_rd_ecm <- sum(ecm_phy@otu_table) %>% print() # ECM
+nb_rd_sapr<- sum(sapr_phy@otu_table) %>% print() # SAPR
+nb_rd_other <- sum(other_phy@otu_table) %>% print() # OTHER  
+
+# % read (rarefied)
+pourc_ecm <- (nb_rd_ecm/(nb_rd_ecm + nb_rd_sapr + nb_rd_other)*100) %>% print() 
+pourc_sapr <- (nb_rd_sapr/(nb_rd_ecm + nb_rd_sapr + nb_rd_other)*100) %>% print() 
+pourc_other <- (nb_rd_other/(nb_rd_ecm + nb_rd_sapr + nb_rd_other)*100) %>% print() 
+
+
+## PER SAMPLE TYPE :
+# 2012
+n_otu_ecm_12 <- nrow(ecm_12@tax_table) %>% print() # ECM
+nb_rd_ecm_12 <- sum(ecm_12@otu_table) %>% print() # ECM
+# 2018
+n_otu_ecm_18 <- nrow(ecm_18@tax_table) %>% print() # ECM
+nb_rd_ecm_18 <- sum(ecm_18@otu_table) %>% print() # ECM
+
+### FCEST:
+n_otu_ecm_for <- nrow(ecm_for@tax_table) %>% print() # ECM
+nb_rd_ecm_for <- sum(ecm_for@otu_table) %>% print() # ECM
+
+### FEE
+n_otu_ecm_edg <- nrow(ecm_edg@tax_table) %>% print() # ECM
+nb_rd_ecm_edg <- sum(ecm_edg@otu_table) %>% print() # ECM
+
+### SC
+n_otu_ecm_cut <- nrow(ecm_cut@tax_table) %>% print() # ECM
+nb_rd_ecm_cut <- sum(ecm_cut@otu_table) %>% print() # ECM
+
+#### POURC:
+pourc_12 <- (nb_rd_ecm_12 / (nb_rd_ecm_12 + nb_rd_ecm_18)*100) %>% print()
+pourc_18 <- (nb_rd_ecm_18 / (nb_rd_ecm_12 + nb_rd_ecm_18)*100) %>% print()
+
+pourc_for <- (nb_rd_ecm_for / (sum(ecm_phy@otu_table))*100) %>% print()
+pourc_edg <- (nb_rd_ecm_edg / (sum(ecm_phy@otu_table))*100) %>% print()
+pourc_cut <- (nb_rd_ecm_cut / (sum(ecm_phy@otu_table))*100) %>% print()
+```
+
+```{r results mm}
+colnames(run_data) 
+
+run_data[,1]# 2 runs
+run_data[,25] # 98,5% similarity clustering
+
+# run 1
+run_data[1,2] # total nb of pyro reads
+run_data[1,3] # sequences passing quality control (QC)
+run_data[1,2]-run_data[1,3] # sequences deleted
+
+# run 2
+run_data[2,2] # total nb of pyro reads
+run_data[2,3] # sequences passing quality control (QC)
+run_data[2,2]-run_data[2,3] # sequences deleted
+
+# scata taxa attribution 
+
+## no IDed sequences
+is.na(raw_clust[,4]) %>% summary() # 1145 clusters ID / 4050 
+pourc_id <- 1145/4050*100; pourc_id # autoID (especially the most abundant clusters)
+# ID for 1000s first TODO
+
+## NF sequences
+grep("PLANT|NF", raw_clust[,4], value = TRUE) %>% length() # 82 non-fungi clusters IDed 
+
+# total VS conserve
+## nb clusters
+nrow(raw_clust) # all
+nrow(ecm_phy@tax_table) # ecm among 1000st more abundant Fungi clusters 
+pourc_ecm <- nrow(ecm_phy@tax_table)/1000*100; pourc_ecm # 20% ECM guild among Fungi
+
+## nb reads
+run_data[3,2]
+raw_plantfungi_read <- sum(raw_clust$Cluster_Size) 
+raw_total_read <- sum(raw_f_clust$Cluster_Size)
+ecm_total_read <-sum(ecm_raw$Cluster_Size) 
+
+pourc_nb_read_fungi <- (raw_total_read/raw_plantfungi_read)*100; pourc_nb_read_fungi
+pourc_nb_read_ecm <- ecm_total_read/raw_total_read*100 %>% print() # pourc nb read conserved/ nb read 
+summary(ecm_raw$Cluster_Size) # min, mean, max of ecm reads
+```
+
+## OVERVIEW_DATA
+```{r general}
+summary(run_data)
+summary(raw_clust)
+summary(ecm_raw)
+summary(sapr_raw)
+levels(droplevels(ecm_raw$Genus))
+levels(droplevels(sapr_raw$Genus))
+
+summary(ecm_raw$Cluster_Size)
+
+hist_cluster_size <- ggplot(ecm_raw, 
+       aes(x=Cluster_Size))+
+geom_histogram(bins=20,breaks=seq(12,2985 ,by=100),color="black", fill="darkseagreen")+
+  scale_y_continuous(name="number of clusters")+
+  scale_x_continuous(name="number of reads", breaks=seq(12,2985 ,by=100))+
+  theme(axis.text.x=element_text(color="coral4", size=8, angle=60))+
+  ggtitle("Distribution of the cluster size for ECM OTUs") 
+
+hist_cluster_size
+
+read_distribution <- plot_read_distribution(ecm_phy, groups = "site", 
+                            plot.type = "density")
+read_distribution
+print(read_distribution + theme_biome_utils())
+```
+```{r SAC nb read}
+sac_f_raw <- ggplot(raw_f_clust, aes(x=c(1:3968),y = cumsum(Cluster_Size)))+   geom_line(color="darkred")+
+  geom_point(size=0.7,alpha=0.5)+
+  coord_cartesian(xlim=c(0,3968),ylim=c(0,244367))+
+  scale_y_continuous(name="cumulative cluster size", breaks=seq(0,244367,by=25000))+
+  scale_x_continuous(name="number of cluster", breaks=seq(0,3968 ,by=200))+
+  geom_vline(xintercept=1000,lwd=0.6,colour="darkred",)+ 
+  annotate("text", x = 1050, y = 25000, label="1000 first clusters conserved", size = 4, angle=0, color = "darkred", hjust = 0)+
+  annotate("text", x= 1050, y= 15000, label="93.65% of total reads", size = 4, angle=0, color = "darkred", hjust = 0)+
+  theme(axis.text.x=element_text(color="coral4", size=8, angle=60))+
+  ggtitle("Cumulative cluster size curve from all fungi clusters") 
+
+sac_f_raw
+
+read_1000 <- sum(raw_f_clust[c(1:1000),2]); read_1000
+read_3968 <- sum(raw_f_clust[c(1001:3968),2]); read_3968
+read_total <- sum(raw_f_clust[,2])
+pourc_read_kept <- read_1000/read_total*100; pourc_read_kept
+```
+```{r sample desing}
+
+nrow(otu) # total number of all clusters (ie fungi ecm or no-ecm, plants)
+colnames(otu)
+
+# samples missing post scata (ie not present in the OTU matrix from clustering = no match between ITS4 - ITS7 tags)
+
+samples_missing_postscata <- outersect(x = sam_no_match$samples_match, y = sam_no_match$samples_all) # antijoin but for columns : extract samples not in common (missing from initial samples design)
+samples_missing_postscata <- dput(as.character(samples_missing_postscata)) # convert into the format c(x; y; ...; z)
+sam[sam$sample_id %in% samples_missing_postscata,] # showing samples with site and plots information missing 
+## 5 controls; 3 Halasen; 2 Halasen_p5, 1 Q1; 6 PCR_neg
+## total missing = 17
+
+sample_count_design <- length(rownames(sam)) # 178 samples total design + controls)
+
+# design samples per site 
+length(rownames(sam_hala))
+length(rownames(sam_hala5))
+length(rownames(sam_fanga))
+
+# sample count
+length(rownames(sam_controls_na)) # 19 (12 NAs + 7 controls)
+sum(is.na(sam_controls_na$site)) 
+real_sample_count <- (length(rownames(sam))-length(rownames(sam_controls_na))) %>%
+  print() # 159 sites samples
+
+
+colnames(otu)
+s_id_controls <- sam_controls_na$sample_id[sam_controls_na$site == "control"] %>%
+  na.exclude()  # what are the samples_id of controls samples ? 
+s_id_controls <- dput(as.character(s_id_controls))
+
+col_control_kept <- which(colnames(otu) %in% s_id_controls, arr.ind = F) 
+colnames(otu)[col_control_kept]
+
+controls_kept <- c("sITS-standard2", "sITS-standard1", "sPCR_neg_1", "sPCR_neg_2", "sQ2", "s49", "s97") # 2 ITS; 2 PCR; 1Q; 2 controls 
+
+161-7+5 
+# 161 = total samples kept after scata
+# -7  = controls kept after scata
+# +5  = site samples missing 
+## final 159 samples -> ALL GOOD 
+```
+```{r missing samples}
+# considering physeq objects (ecm_phy,ecm_phy, hala5_ecm, fanga_ecm have been cleaned (sample supress if 0) by clean_pq() )
+colnames(hala_sam)
+summary(hala_sam[,c(2,5:8)])
+table(hala_sam$plot,hala_sam$treatment)
+
+# for ecm-sapr
+summary(sam$sample_id)
+summary(physeq@sam_data$sample_id)
+miss_sam_clust_ecmsapr <- anti_join(x = sam, y = physeq@sam_data) # return all rows from x without a match in y.
+miss_sam_clust_ecmsapr$sample_id # samples deleted after bioinformatic processes (scata, first 1000s clusters, ecm-sapr guilds)
+
+# for ecm only
+summary(sam$sample_id)
+summary(ecm_phy@sam_data$sample_id)
+miss_sam_clust_ecm <- anti_join(x = sam, y = ecm_phy@sam_data)
+miss_sam_clust_ecm$sample_id
+# 8 PCR neg => good control,
+# what about ITS standard ?
+
+clipr::write_clip(miss_sam_clust_ecm$sample_id) # to copy dataframe or vector
+# controls and na 
+miss_sam_clust_ctrl <- anti_join(x = sam_controls_na, y = ecm_phy@sam_data)
+miss_sam_clust_ctrl$sample_id
+
+length(miss_sam_clust_ctrl$sample_id)
+length(row.names(sam_controls_na)) # every control and NA are suppressed from the dataset (because 0 oSCurence of clusters)
+
+# hala
+miss_sam_clust_hala <- anti_join(x = sam_hala[,1:7], y = ecm_phy@sam_data[,1:7]) # exclude zone column because we changed factor values for this column
+miss_sam_clust_hala$sample_id
+
+# hala5
+miss_sam_clust_hala5 <- anti_join(x = sam_hala5, y = hala5_ecm@sam_data)
+miss_sam_clust_hala5$sample_id
+
+# fanga
+miss_sam_clust_fanga <- anti_join(x = sam_fanga, y = fanga_ecm@sam_data)
+miss_sam_clust_fanga$sample_id
+
+# check if count is good (total missing samples VS sum of missing samples per site)
+length(miss_sam_clust_ecm$sample_id)/(length(miss_sam_clust_hala$sample_id)+length(miss_sam_clust_hala5$sample_id)+length(miss_sam_clust_fanga$sample_id)+length(miss_sam_clust_ctrl$sample_id)) 
+# =1 -> all good 
+
+sam[sam$sample_id %in% samples_missing_postscata,] # showing samples with site and plots information missing 
+## 5 controls; 3 Halasen; 2 Halasen_p5, 1 Q1; 6 PCR_neg
+## total missing = 17
+length(miss_sam_clust_ecm$sample_id) # total 
+length(miss_sam_clust_ctrl$sample_id)
+
+length(miss_sam_clust_hala$sample_id) # 3 missing post scata; 3 missing post taxa-attrib
+length(miss_sam_clust_hala5$sample_id)# 2 missing post scata; 2 missing post taxa-attrib
+length(miss_sam_clust_fanga$sample_id)# 0 missing post scata; 20 missing post taxa-attrib
+
+length(rownames(sam_hala))
+length(rownames(sam_hala5))
+length(rownames(sam_fanga))
+```
+```{r potential contamination ?}
+which(samples_kept_pq>0, arr.ind = T) # location where values of controls have reads
+clusters_reads_inctrl <- rownames(which(samples_kept_pq>0, arr.ind = T)) %>% as.factor()
+levels(clusters_reads_inctrl) # clusters where we found reads in controls samples 
+## -> should we erase them for dataset ? 
+## surely, imo 
+```
+```{r rarefaction and hellinger transformation comparison}
+###### distribution
+all_distrib_raref <- plot_read_distribution(
+  physeq, groups = "site", 
+  plot.type = "density")+
+  xlab("Reads per site")+
+  ggtitle("Distribution of the number of reads per site")
+all_distrib_raref
+
+all_distrib_notraref <- plot_read_distribution(
+  physeq_notrarefied, groups = "site", 
+  plot.type = "density")+
+  xlab("Reads per site")+
+  ggtitle("Distribution of the number of reads per site")
+all_distrib_notraref
+
+all_distrib_relative <- plot_read_distribution(
+  physeq_relative, groups = "site", 
+  plot.type = "density")+
+  xlab("Reads per site")+
+  ggtitle("Distribution of the number of reads per site")
+all_distrib_relative
+
+all_distrib_hellinger <- plot_read_distribution(
+  physeq_hellinger, groups = "site", 
+  plot.type = "density")+
+  xlab("Reads per site")+
+  ggtitle("Distribution of the number of reads per site")
+all_distrib_hellinger
+
+####### raref 
+all_curve_raref <- phyloseq.extended::ggrare(physeq = physeq, 
+                                             step = 10, 
+                                             color = "year", 
+                                             label="sample_id",
+                                             plot=F, 
+                                             se=T)+ 
+  facet_wrap(~site)+
+  ggtitle("Rarefaction curves of samples per site")+
+  xlab("Number of reads")+
+  ylab("OTU richness")
+all_curve_raref
+
+all_curve_raref_group <- phyloseq.extended::ggrare(physeq, step = 10, color = "site",plot=F, se=T, label = "sample_id")+ 
+  labs(x = "Group size",
+       y =  "OTU richness",
+       title = "rarefaction curves by samples",
+       color = "Treatment")+
+  guides(fill = F) # Suppressing the filling (standard error) legend 
+all_curve_raref_group
+
+all_curve_notraref_group <- phyloseq.extended::ggrare(physeq_notrarefied, step = 10, color = "site",plot=F, se=T, label = "sample_id")+ 
+  labs(x = "Group size",
+       y =  "OTU richness",
+       title = "rarefaction curves by samples",
+       color = "Treatment")+
+  guides(fill = F) # Suppressing the filling (standard error) legend 
+all_curve_notraref_group
+
+all_curve_notraref_group <- phyloseq.extended::ggrare(physeq_relative, step = 10, color = "site",plot=F, se=T, label = "sample_id")+ 
+  labs(x = "Group size",
+       y =  "OTU richness",
+       title = "rarefaction curves by samples",
+       color = "Treatment")+
+  guides(fill = F) # Suppressing the filling (standard error) legend 
+all_curve_notraref_group
+
+######### multivariate
+## hellinger
+all_mdsbray_hellinger <- ordinate(physeq_hellinger, method = "MDS", dist="bray")
+all_mdsbray_hellinger <- plot_ordination(physeq_hellinger, all_mdsbray_hellinger, type="samples", color="site",label="sample_id")+
+  geom_point(size=2)+
+  facet_wrap(~year)+
+  # color and elipse
+  scale_color_manual(values = c("Halasen_p_5" = "blue3",
+                              "Halasen" = "green4",
+                              "Fangamon" = "darkorange"))+
+  stat_ellipse(type="t", level=0.70)+
+  # legend
+  guides(color=guide_legend(title="position to SC"))+
+  ggtitle(label = "MDS of samples to Halasen_edge by year", subtitle="presence-absence (brayard distance)")
+all_mdsbray_hellinger
+
+## justabundance
+all_mdsbray_relativeab <- ordinate(physeq_relative, method = "MDS", dist="bray")
+all_mdsbray_relativeab <- plot_ordination(physeq_relative, all_mdsbray_relativeab, type="samples", color="site",label="sample_id")+
+  geom_point(size=2)+
+  facet_wrap(~year)+
+  # color and elipse
+  scale_color_manual(values = c("Halasen_p_5" = "blue3",
+                              "Halasen" = "green4",
+                              "Fangamon" = "darkorange"))+
+  stat_ellipse(type="t", level=0.70)+
+  # legend
+  guides(color=guide_legend(title="position to SC"))+
+  ggtitle(label = "MDS of samples to Halasen_edge by year", subtitle="presence-absence (brayard distance)")
+all_mdsbray_relativeab
+
+## not rarefied
+all_mdsbray_notrarefied <- ordinate(physeq_notrarefied, method = "MDS", dist="bray")
+all_mdsbray_notrarefied <- plot_ordination(physeq_notrarefied, all_mdsbray_notrarefied, type="samples", color="site",label="sample_id")+
+  geom_point(size=2)+
+  facet_wrap(~year)+
+  # color and elipse
+  scale_color_manual(values = c("Halasen_p_5" = "blue3",
+                              "Halasen" = "green4",
+                              "Fangamon" = "darkorange"))+
+  stat_ellipse(type="t", level=0.70)+
+  # legend
+  guides(color=guide_legend(title="position to SC"))+
+  ggtitle(label = "MDS of samples from Halasen_edge by year", subtitle="presence-absence (brayard distance)")
+all_mdsbray_notrarefied
+
+## rarefied
+all_mdsbray_rarefied <- ordinate(physeq, method = "MDS", dist="bray")
+all_mdsbray_rarefied <- plot_ordination(physeq, all_mdsbray_rarefied, type="samples", color="site",label="sample_id")+
+  geom_point(size=2)+
+  facet_wrap(~year)+
+  # color and elipse
+  scale_color_manual(values = c("Halasen_p_5" = "blue3",
+                              "Halasen" = "green4",
+                              "Fangamon" = "darkorange"))+
+  stat_ellipse(type="t", level=0.70)+
+  # legend
+  guides(color=guide_legend(title="position from SC"))+
+  ggtitle(label = "MDS of samples from Halasen_edge by year", subtitle="presence-absence (brayard distance)")
+all_mdsbray_rarefied
+```
+```{r check losing clusters - samples after clean_pq}
+# nb of clusters in subsets
+nrow(otu_all)             # 4050 
+nrow(otu1)                # 3411
+nrow(physeq@otu_table)    # 588
+nrow(ecm_phy@otu_table)   # 149
+nrow(sapr_phy@otu_table)  # 172 
+nrow(fanga_ecm@otu_table) # 37
+nrow(ecm_phy@otu_table)  # 100
+nrow(hala5_ecm@otu_table) # 49
+
+# representation of the total nb of reads
+sum(otu_all) # total all reads
+sum(otu_samples_out) # total reads with controls out 
+sum(otu_fungi) # total reads only fungi
+
+sum(otu_fungi)/sum(otu_all)*100 # 75% fungi in all reads 
+
+sum(otu1)-sum(otu_001) # losing clusters with <1% relative abundance = 81668 reads
+sum(otu_001) # without <1% clusters 
+
+sum(physeq_notrarefied@otu_table)
+sum(physeq_notrarefied@otu_table)-sum(physeq@otu_table) # loosing 115 997 reads with rarefaction
+sum(physeq@otu_table) # 40 502 reads after rarefaction in all sites 
+
+sum(ecm_phy@otu_table) # 8 379 ecm reads
+sum(sapr_phy@otu_table)# 18 615 saprotroph reads
+sum(other_phy@otu_table)# 13508 reads from "other" (other guilds and not attributed, could be saprobes) 
+
+# per guild - all sites
+pourc_ecm <- sum(ecm_phy@otu_table)/sum(physeq@otu_table)*100; pourc_ecm # 21% ecm 
+pourc_sapr <- sum(sapr_phy@otu_table)/sum(physeq@otu_table)*100; pourc_sapr # 46 % sapro
+pourc_other <- sum(other_phy@otu_table)/sum(physeq@otu_table)*100; pourc_other # 33 % unknown (potential sapro?)
+pourc_other + pourc_sapr + pourc_ecm
+
+# per site (rarefied)
+sum(ecm_phy@otu_table)
+sum(hala5_ecm@otu_table)
+sum(fanga_ecm@otu_table)
+
+pourc_ecm_phy <- sum(ecm_phy@otu_table)/sum(hala@otu_table)*100; pourc_ecm_phy # 29.2% ecm hala
+pourc_hala5_ecm <- sum(hala5_ecm@otu_table)/sum(hala5@otu_table)*100; pourc_hala5_ecm # 23.1 % ecm hala5  
+pourc_fanga_ecm <- sum(fanga_ecm@otu_table)/sum(fanga@otu_table)*100; pourc_fanga_ecm # 12.6% fanga
+```
+
+```{r sequencing depth changing between pool ?}
+richness_allc_raref <- specnumber(t(otu_rarefied)) # richness calc (same as nonrarefied ofc) 
+summary(richness_allc_raref) # richness of samples from ALL Fungi clusters
+# hist(richness_allc_raref) # PLOT 
+
+reads_sum_per_sample <- data.frame(rownames(otu_t), rowSums(otu_t)) # after deleting <1% relative abundance
+summary(reads_sum_per_sample) # sum of reads per sample for ALL Fungi clusters 
+shapiro.test(reads_sum_per_sample$rowSums.otu_t.) # normal distribution
+#hist(reads_sum_per_sample$rowSums.otu_t.) # PLOT # rarefying based on the min sample depth (here 419)
+low_seqdepth_samples <- which(reads_sum_per_sample < 300, arr.ind = T) %>% data.frame() %>% print() # samples with sequencing depth under a threshold
+list_low_seqdepth_samples <- dput(as.character(rownames(low_seqdepth_samples))) # convert into the format c(x; y; ...; z)
+# TOASK -> should we delete these samples ? 
+# View(sam[list_low_seqdepth_samples,])
+## check pool 1 2 sequencing depth difference
+
+physeq_notrarefied_p1 <- subset_samples(physeq_001kept, physeq_001kept@sam_data$pool=="1") %>% clean_pq(remove_empty_samples = T,remove_empty_taxa = T, clean_samples_names = T)
+
+physeq_notrarefied_p2 <- subset_samples(physeq_001kept, physeq_001kept@sam_data$pool=="2") %>% clean_pq(remove_empty_samples = T,remove_empty_taxa = T, clean_samples_names = T)
+
+r_sps <- rowSums(t(physeq_001kept@otu_table)) # r_sps = sum per sample
+summary(r_sps)
+#hist(r_sps) #PLOT
+
+rp1_sps <- rowSums(t(physeq_notrarefied_p1@otu_table))
+summary(rp1_sps)
+pool1 <- 1
+rp1_sps_df <- data.frame("pool" = 1, "sum_reads" = rp1_sps)
+
+rp2_sps <- rowSums(t(physeq_notrarefied_p2@otu_table)) 
+summary(rp2_sps)
+rp2_sps_df <- data.frame("pool" = 2, "sum_reads" = rp2_sps)
+
+r_sps_df <- bind_rows(rp1_sps_df, rp2_sps_df)
+r_sps_df <- cbind(physeq_001kept@sam_data$year, physeq_001kept@sam_data$plot, r_sps_df)
+colnames(r_sps_df) <- c("year", "plot", "pool", "sum_reads")
+r_sps_df$pool <- as.factor(r_sps_df$pool)
+
+# graphical representation
+mu_pool <- ddply(r_sps_df, "pool", summarise, grp.mean=mean(sum_reads)) # calculed mean of each group 
+ggplot(r_sps_df, aes(x = sum_reads, color = pool, fill = pool)) +
+  geom_histogram(aes(y = ..density..), alpha = 0.5, position = "identity")+
+  geom_density(alpha=0.3)+
+  geom_vline(data = mu_pool, aes(xintercept=grp.mean, color= pool),
+           linetype="dashed")
+
+boxplot(r_sps ~ physeq_001kept@sam_data$pool)
+boxplot(r_sps ~ physeq_001kept@sam_data$plot)
+
+
+rd_sps_inf1_gg <- reshape2::melt(rd_sps_inf1[,2:3])
+ggplot(rd_sps_inf1_gg, aes(x = value, color = variable, fill = variable))+
+  geom_histogram(aes(y = ..count..), alpha = 0.4, position = "identity")+
+  geom_density(alpha = 0.3)+
+  scale_y_continuous(name = "nb of samples")+
+  scale_x_continuous(name = "read sum per sample", breaks = seq(0,3000 ,by = 200))+
+  ggtitle("Number of samples per read sum")+
+  geom_vline(xintercept = c(mean(rd_sps_inf1$sumreads_otu1), mean(rd_sps_inf1$sumreads_otu_001)),lwd = 0.6,colour = c("red","blue"))
+
+# statistical test
+lm_seq_depth <- lmer(sum_reads ~ pool + (pool | plot) + (pool | year), r_sps_df)
+qqnorm(residuals(lm_seq_depth))
+qqline(residuals(lm_seq_depth))
+plot(lm_seq_depth)
+summary(lm_seq_depth)
+anova(lm_seq_depth)  # if test conditions arent fulfilled 
+# TOASK seems to be significant difference in seq depth for the pools
+```
+
+# *2 OVERVIEW DATA FROM SITES*
+```{r GENERAL}
+table(ecm_phy@sam_data$zone, ecm_phy@sam_data$year, ecm_phy@sam_data$site) # desing post sub-sampling, 1% otu suppresion, etc.
+
+read_distrib <- plot_read_distribution(
+  ecm_phy, groups = "site", 
+  plot.type = "density")+
+  xlab("Reads per site")+
+  ggtitle("Distribution of the number of reads per site")
+read_distrib
+```
+```{r COMPOSITION}
+asc <- which(sum_res$data == "Ascomycota") %>% length()
+bas <- which(sum_res$data == "Basidiomycota") %>% length()
+pourc_asc <- (asc / (asc + bas))*100; pourc_asc
+pourc_bas <- (bas / (asc + bas))*100; pourc_bas
+```
+```{r ALPHA_DIV}
+bxplt_rich <- df_div %>%
+  ggplot(aes(x = factor(zone, levels = treat_order), y = rich, fill = factor(zone)))+
+  geom_boxplot(width = 0.4, color = "black") +
+  coord_cartesian(ylim=c(0,15))+
+  scale_y_continuous(name = "OTU richness", breaks = seq(0, 15, by = 2))+
+  theme(axis.text.x=element_text(color="coral4", size = 11, angle = 90))+
+  facet_grid(~ site*year) +
+  theme(legend.position="none", plot.title = element_text(size = 14)) +
+  labs(title = "ECM OTU richness by cutting zone")+
+  xlab("Zone")+
+  guides(fill = guide_legend(title = str_wrap("ECM OTU richness by cutting zone", width = 20)))+
+  scale_fill_manual(values = treat_color)
+bxplt_rich
+
+bxplt_relat <- df_div %>%
+  ggplot(aes(x = factor(zone, levels = treat_order), y = ecm_abun, fill = factor(zone)))+
+  geom_boxplot(width = 0.4, color = "black") +
+  coord_cartesian(ylim=c(0,1))+
+  scale_y_continuous(name = "OTU richness", breaks = seq(0, 1, by = 0.2))+
+  theme(axis.text.x=element_text(color="coral4", size = 11, angle = 90))+
+  facet_grid(~ site*year) +
+  theme(legend.position="none", plot.title = element_text(size = 14)) +
+  labs(title = "ECM OTU relative abundance by cutting zone")+
+  xlab("Zone")+
+  guides(fill = guide_legend(title = str_wrap("ECM OTU relative abundance by cutting zone", width = 20)))+
+  scale_fill_manual(values = treat_color)
+bxplt_relat
+```
+```{r BETA DIV}
+# Fangamon
+bray_fanga12_ord <- ordinate(physeq = ecm_fanga12_new, method = "MDS", dist="bray")
+bray_fanga12 <- plot_ordination(physeq = ecm_fanga12_new, ordination = bray_fanga12_ord, type = "samples", color = "zone")+
+  geom_point(size = 2)+
+  geom_text(label = ecm_fanga12_new@sam_data$sample_id, size = 2.7, nudge_y = +0.05)+
+  scale_color_manual(values = treat_color_mds, breaks = treat_order)+
+  stat_ellipse(type="t", level=0.70)+
+  guides(color=guide_legend(title="Zone"))+
+    ggtitle(label = "MDS of samples grouped by zone (F1_12)",subtitle = "by number of sequence reads (bray-curtis index)")
+bray_fanga12
+
+bray_fanga18_ord <- ordinate(physeq = ecm_fanga18_new, method = "MDS", dist="bray")
+bray_fanga18 <- plot_ordination(physeq = ecm_fanga18_new, ordination = bray_fanga18_ord, type = "samples", color = "zone")+
+  geom_point(size = 2)+
+  geom_text(label = ecm_fanga18_new@sam_data$sample_id, size = 2.7, nudge_y = +0.05)+
+  scale_color_manual(values = treat_color_mds, breaks = treat_order)+
+  stat_ellipse(type="t", level=0.70)+
+  guides(color=guide_legend(title="Zone"))+
+    ggtitle(label = "MDS of samples grouped by zone (F1_18)",subtitle = "by number of sequence reads (bray-curtis index)")
+bray_fanga18
+
+# Halasen
+bray_hala12_ord <- ordinate(physeq = ecm_hala12, method = "MDS", dist="bray")
+bray_hala12 <- plot_ordination(physeq = ecm_hala12, ordination = bray_hala12_ord, type = "samples", color = "zone")+
+  geom_point(size = 2)+
+  geom_text(label = ecm_hala12@sam_data$sample_id, size = 2.7, nudge_y = +0.05)+
+  scale_color_manual(values = treat_color_mds, breaks = treat_order)+
+  stat_ellipse(type="t", level=0.70)+
+  guides(color=guide_legend(title="Zone"))+
+    ggtitle(label = "MDS of samples grouped by zone (H1_12)",subtitle = "by number of sequence reads (bray-curtis index)")
+bray_hala12
+
+bray_hala18_ord <- ordinate(physeq = ecm_hala18_new, method = "MDS", dist="bray")
+bray_hala18 <- plot_ordination(physeq = ecm_hala18_new, ordination = bray_hala18_ord, type = "samples", color = "zone")+
+  geom_point(size = 2)+
+  geom_text(label = ecm_hala18_new@sam_data$sample_id, size = 2.7, nudge_y = +0.05)+
+  scale_color_manual(values = treat_color_mds, breaks = treat_order)+
+  stat_ellipse(type="t", level=0.70)+
+  guides(color=guide_legend(title="Zone"))+
+    ggtitle(label = "MDS of samples grouped by zone (H1_18)",subtitle = "by number of sequence reads (bray-curtis index)")
+bray_hala18
+
+# Halasen 5p
+bray_hala5p_ord <- ordinate(physeq = ecm_hala5p_new, method = "MDS", dist="bray")
+bray_hala5p <- plot_ordination(physeq = ecm_hala5p_new, ordination = bray_hala5p_ord, type = "samples", color = "zone")+
+  geom_point(size = 2)+
+  geom_text(label = ecm_hala5p_new@sam_data$sample_id, size = 2.7, nudge_y = +0.05)+
+  scale_color_manual(values = treat_color_mds, breaks = treat_order)+
+  stat_ellipse(type="t", level=0.70)+
+  guides(color=guide_legend(title="Zone"))+
+    ggtitle(label = "MDS of samples grouped by zone (H2)",subtitle = "by number of sequence reads (bray-curtis index)")
+bray_hala5p
+```
+```{r MODEL RICH}
+# Fangamon
+# verif assumption for glmm
+summary(df_div_fanga$rich)
+summary(df_div_fanga$ecm_abun)
+par(mfrow = c(1, 2))
+hist(df_div_fanga$rich, breaks = seq(0, 15, by = 1))
+hist(df_div_fanga$ecm_abun, breaks = seq(0, 1, by = 0.1))
+hist(log(ecm_abun))
+par(mfrow = c(1, 1))
+
+glmm_rich_fanga <- lme4::glmer(rich ~ zone * year +
+                           (1 | plot),
+                         family = poisson(link = "log"),
+                         data = df_div_fanga) 
+
+summary(glmm_rich_fanga)
+car::Anova(glmm_rich_fanga, type = "III")
+pair_glmm_rich_fanga <- emmeans(glmm_rich_fanga, ~ zone, type = "response")
+pairs(pair_glmm_rich_fanga)
+
+# 2012 & 2018
+glmm_rich_fanga12 <- lme4::glmer(rich ~ zone +
+                           (1 | plot),
+                         family = poisson(link = "log"),
+                         data = df_div_fanga12) 
+glmm_rich_fanga18 <- lme4::glmer(rich ~ zone +
+                           (1 | plot),
+                         family = poisson(link = "log"),
+                         data = df_div_fanga18)
+
+summary(glmm_rich_fanga12)
+car::Anova(glmm_rich_fanga12, type = "III")
+tab_model(glmm_rich_fanga12, show.icc = F, show.df = F, show.ngroups = F, show.re.var = T, show.ngroups = F, show.re.var = T)
+pair_glmm_rich_fanga12 <- emmeans(glmm_rich_fanga12, ~ zone, type = "response")
+pairs(pair_glmm_rich_fanga12)
+
+summary(glmm_rich_fanga18)
+car::Anova(glmm_rich_fanga18, type = "III")
+tab_model(glmm_rich_fanga18, show.icc = F, show.df = F, show.ngroups = F, show.re.var = T)
+pair_glmm_rich_fanga18 <- emmeans(glmm_rich_fanga18, ~ zone, type = "response")
+pairs(pair_glmm_rich_fanga18)
+
+# Halasen SC
+# verif assumption for glmm
+summary(df_div_hala$rich)
+summary(df_div_hala$ecm_abun)
+par(mfrow = c(1, 2))
+hist(df_div_hala$rich, breaks = seq(0, 15, by = 1))
+hist(df_div_hala$ecm_abun, breaks = seq(0, 1, by = 0.1))
+hist(log(ecm_abun))
+par(mfrow = c(1, 1))
+
+glmm_rich_hala <- lme4::glmer(rich ~ zone * year +
+                           (1 | plot),
+                         family = poisson(link = "log"),
+                         data = df_div_hala) 
+
+summary(glmm_rich_hala)
+car::Anova(glmm_rich_hala, type = "III")
+pair_glmm_rich_hala <- emmeans(glmm_rich_hala, ~ zone, type = "response")
+pairs(pair_glmm_rich_hala)
+
+# 2012 & 2018
+glmm_rich_hala12 <- lme4::glmer(rich ~ zone +
+                           (1 | plot),
+                         family = poisson(link = "log"),
+                         data = df_div_hala12) 
+glmm_rich_hala18 <- lme4::glmer(rich ~ zone +
+                           (1 | plot),
+                         family = poisson(link = "log"),
+                         data = df_div_hala18)
+
+summary(glmm_rich_hala12)
+car::Anova(glmm_rich_hala12, type = "III")
+tab_model(glmm_rich_hala12, show.icc = F, show.df = F, show.ngroups = F, show.re.var = T)
+pair_glmm_rich_hala12 <- emmeans(glmm_rich_hala12, ~ zone, type = "response")
+pairs(pair_glmm_rich_hala12)
+
+summary(glmm_rich_hala18)
+car::Anova(glmm_rich_hala18, type = "III")
+tab_model(glmm_rich_hala18, show.icc = F, show.df = F, show.ngroups = F, show.re.var = T)
+pair_glmm_rich_hala18 <- emmeans(glmm_rich_hala18, ~ zone, type = "response")
+pairs(pair_glmm_rich_hala18)
+
+# Halasen 5p
+# verif assumption for glmm
+summary(df_div_hala5p$rich)
+summary(df_div_hala5p$ecm_abun)
+par(mfrow = c(1, 2))
+hist(df_div_hala5p$rich, breaks = seq(0, 15, by = 1))
+hist(df_div_hala5p$ecm_abun, breaks = seq(0, 1, by = 0.1))
+hist(log(ecm_abun))
+par(mfrow = c(1, 1))
+
+glmm_rich_hala5p <- lme4::glmer(rich ~ zone +
+                           (1 | plot),
+                         family = poisson(link = "log"),
+                         data = df_div_hala5p) 
+
+summary(glmm_rich_hala5p)
+car::Anova(glmm_rich_hala5p, type = "III")
+tab_model(glmm_rich_hala5p, show.icc = F, show.df = F, show.ngroups = F, show.re.var = T)
+pair_glmm_rich_hala5p <- emmeans(glmm_rich_hala5p, ~ zone, type = "response")
+pairs(pair_glmm_rich_hala5p)
+```
+```{r MODEL ABUN}
+# Fangamon
+# verif assumption for glmm
+summary(df_div_fanga$ecm_abun)
+par(mfrow = c(1, 2))
+hist(df_div_fanga$ecm_abun, breaks = seq(0, 1, by = 0.1))
+hist(log(ecm_abun))
+par(mfrow = c(1, 1))
+
+glmm_abun_fanga <- lme4::glmer(ecm_abun ~ zone * year +
+                           (1 | plot),
+                         family = poisson(link = "log"),
+                         data = df_div_fanga) 
+
+summary(glmm_abun_fanga)
+car::Anova(glmm_abun_fanga, type = "III")
+pair_glmm_abun_fanga <- emmeans(glmm_abun_fanga, ~ zone, type = "response")
+pairs(pair_glmm_abun_fanga)
+
+# 2012 & 2018
+glmm_abun_hala18 <- lme4::glmer(ecm_abun ~ zone +
+                           (1 | plot),
+                         family = poisson(link = "log"),
+                         data = df_div_hala18) 
+glmm_abun_fanga18 <- lme4::glmer(ecm_abun ~ zone +
+                           (1 | plot),
+                         family = poisson(link = "log"),
+                         data = df_div_fanga18)
+
+summary(glmm_abun_hala18)
+car::Anova(glmm_abun_hala18, type = "III")
+pair_glmm_abun_hala18 <- emmeans(glmm_abun_hala18, ~ zone, type = "response")
+pairs(pair_glmm_abun_hala18)
+
+summary(glmm_abun_fanga18)
+car::Anova(glmm_abun_fanga18, type = "III")
+pair_glmm_abun_fanga18 <- emmeans(glmm_abun_fanga18, ~ zone, type = "response")
+pairs(pair_glmm_abun_fanga18)
+
+# Halasen SC
+# verif assumption for glmm
+summary(df_div_hala$ecm_abun)
+summary(df_div_hala$ecm_abun)
+par(mfrow = c(1, 2))
+hist(df_div_hala$ecm_abun, breaks = seq(0, 15, by = 1))
+hist(df_div_hala$ecm_abun, breaks = seq(0, 1, by = 0.1))
+hist(log(ecm_abun))
+par(mfrow = c(1, 1))
+
+glmm_abun_hala <- lme4::glmer(ecm_abun ~ zone * year +
+                           (1 | plot),
+                         family = poisson(link = "log"),
+                         data = df_div_hala) 
+
+summary(glmm_abun_hala)
+car::Anova(glmm_abun_hala, type = "III")
+pair_glmm_abun_hala <- emmeans(glmm_abun_hala, ~ zone, type = "response")
+pairs(pair_glmm_abun_hala)
+
+# 2012 & 2018
+glmm_abun_hala12 <- lme4::glmer(ecm_abun ~ zone +
+                           (1 | plot),
+                         family = poisson(link = "log"),
+                         data = df_div_hala12) 
+glmm_abun_hala18 <- lme4::glmer(ecm_abun ~ zone +
+                           (1 | plot),
+                         family = poisson(link = "log"),
+                         data = df_div_hala18)
+
+summary(glmm_abun_hala12)
+car::Anova(glmm_abun_hala12, type = "III")
+pair_glmm_abun_hala12 <- emmeans(glmm_abun_hala12, ~ zone, type = "response")
+pairs(pair_glmm_abun_hala12)
+
+summary(glmm_abun_hala18)
+car::Anova(glmm_abun_hala18, type = "III")
+pair_glmm_abun_hala18 <- emmeans(glmm_abun_hala18, ~ zone, type = "response")
+pairs(pair_glmm_abun_hala18)
+
+# Halasen 5p
+# verif assumption for glmm
+summary(df_div_hala5p$ecm_abun)
+summary(df_div_hala5p$ecm_abun)
+par(mfrow = c(1, 2))
+hist(df_div_hala5p$ecm_abun, breaks = seq(0, 15, by = 1))
+hist(df_div_hala5p$ecm_abun, breaks = seq(0, 1, by = 0.1))
+hist(log(ecm_abun))
+par(mfrow = c(1, 1))
+
+glmm_abun_hala5p <- lme4::glmer(ecm_abun ~ zone +
+                           (1 | plot),
+                         family = poisson(link = "log"),
+                         data = df_div_hala5p) 
+
+summary(glmm_abun_hala5p)
+car::Anova(glmm_abun_hala5p, type = "III")
+pair_glmm_abun_hala5p <- emmeans(glmm_abun_hala5p, ~ zone, type = "response")
+pairs(pair_glmm_abun_hala5p)
+```
+```{r MODEL FANGAMON}
+# verif assumption for glmm
+summary(df_div_fanga$rich)
+summary(ecm_abun_df_fanga$ecm_abun)
+par(mfrow = c(1, 2))
+hist(df_div_fanga$rich, breaks = seq(0, 15, by = 1))
+hist(ecm_abun_df_fanga$ecm_abun, breaks = seq(0, 1, by = 0.1))
+hist(log(ecm_abun))
+par(mfrow = c(1, 1))
+
+# GLMM richness 
+
+# general & red
+glmm_rich_fanga <- lme4::glmer(rich ~ zone * year +
+                           (1 | plot),
+                         family = poisson(link = "log"),
+                         data = df_div_fanga) 
+
+glmm_richred_fanga <- lme4::glmer(rich ~ (1 | plot),
+                         family = poisson(link = "log"),
+                         data = df_div_fanga) 
+
+summary(glmm_rich_fanga)
+car::Anova(glmm_rich_fanga, type = "III")
+anova(glmm_rich_fanga, glmm_richred_fanga) # likely-hood ration test (LRT test) # where dff is the number of parameters that vary between the 2 models
+summary(glmm_rich)
+pair_glmm_rich_fanga <- emmeans(glmm_rich_fanga, ~ zone, type = "response")
+pairs(pair_glmm_rich_fanga)
+tab_model(glmm_rich_fanga, show.df = F, show.icc = F)
+
+# 2012 & 2018
+glmm_rich_fanga12 <- lme4::glmer(rich ~ zone +
+                           (1 | plot),
+                         family = poisson(link = "log"),
+                         data = df_div_fanga12) 
+glmm_rich_fanga18 <- lme4::glmer(rich ~ zone +
+                           (1 | plot),
+                         family = poisson(link = "log"),
+                         data = df_div_fanga18)
+
+summary(glmm_rich_fanga12)
+car::Anova(glmm_rich_fanga12, type = "III")
+pair_glmm_rich_fanga12 <- emmeans(glmm_rich_fanga12, ~ zone, type = "response")
+pairs(pair_glmm_rich_fanga12)
+tab_model(glmm_rich_fanga12, show.df = F, show.icc = F)
+
+summary(glmm_rich_fanga18)
+car::Anova(glmm_rich_fanga18, type = "III")
+pair_glmm_rich_fanga18 <- emmeans(glmm_rich_fanga18, ~ zone, type = "response")
+plot(pair_glmm_rich_fanga18)
+pairs(pair_glmm_rich_fanga18)
+
+# NS general model, 
+# when considered years independantly: S for year 2018, between FOR - CUT but NS between TH_B - TH_NB 
+##  consider to merge both to increase statistical power
+```
+```{r HEATMAP}
+braydist = phyloseq::distance(ecm_phy, "bray")
+dist_df = reshape2::melt(as.matrix(braydist))
+
+# grouped heatmaps
+## by treatment 
+
+#### breaks (continuous or discreet ?)
+fanga_breaks <- seq(min(occurence_fanga), max(occurence_fanga), length.out = 10)
+fanga_breaks
+
+hala_breaks <- seq(min(occurence_hala), max(occurence_hala), length.out = 10)
+hala_breaks
+
+hala5p_breaks <- seq(min(occurence_hala5p), max(occurence_hala5p), length.out = 10)
+hala5p_breaks
+
+# full heatmap
+htmap_fanga <- pheatmap::pheatmap(mat = t(occurence_fanga), 
+                   cellwidth = 30, cellheight = 7,
+                   cluster_row = F, cluster_col = F,
+                   fontsize_row = 7, fontsize_col = 10,
+                   color = pal_ht_fanga,
+                   annotation_col = df_color,
+                   annotation_colors = c(anot_colors_year, anot_colors_treat),
+                   main = "% OTU occurence by zone (F1)",
+                   display_numbers = F, 
+                   number_format = "%.0f", 
+                   fontsize_number = 5,
+                   na_col = "white")
+
+htmap_hala <- pheatmap::pheatmap(mat = t(occurence_hala), 
+                   cellwidth = 30, cellheight = 7,
+                   cluster_row = F, cluster_col = F,
+                   fontsize_row = 7, fontsize_col = 10,
+                   color = pal_ht_hala,
+                   annotation_col = df_color,
+                   annotation_colors = c(anot_colors_year, anot_colors_treat),
+                   main = "% OTU occurence by zone (H1)")
+
+htmap_hala5p <- pheatmap::pheatmap(mat = t(occurence_hala5p), 
+                   cellwidth = 30, cellheight = 7,
+                   cluster_row = F, cluster_col = F,
+                   fontsize_row = 7, fontsize_col = 10,
+                   color = pal_ht_hala5p,
+                   annotation_col = df_color,
+                   annotation_colors = c(anot_colors_year, anot_colors_treat),
+                   main = "% OTU occurence by zone (H2)")
+
+### 
+ht_count0 <- htmp_all$data %>% group_by(OTU_ID, yr_treat) %>%
+  dplyr::summarise(sumcount = sum(Abundance, na.rm = TRUE)) %>% as.data.frame()
+
+ht_count <- ht_count0 %>%
+  # convert state to factor and reverse order of levels
+  mutate(Genus = factor(Genus, levels = rev(sort(unique(Genus))))) %>%
+  # create a new variable from count
+  mutate(countfactor = cut(sumcount, breaks = c(-1, 1, 5, 10, 50, 150, 450, max(sumcount, na.rm = T)),
+                          labels=c("0", "0-1", "5-10", "10-50", "50-150", "150-450", ">450"))) %>%
+  # change level order
+  mutate(countfactor=factor(as.character(countfactor), levels=rev(levels(countfactor))))
+
+### trying to creat multi xlabel
+yr <- ifelse(grepl("2012", ht_count$yr_treat), "2012", "2018")
+treat <- ifelse(grepl("CCFM", ht_count$yr_treat), "CCFM",
+                         ifelse(grepl("SC", ht_count$yr_treat), "SC", "FOR")) # nested ifelse
+ht_count <- cbind(ht_count, yr, treat)
+### dont know.
+
+## plotting
+htmap_all <- ggplot(ht_count,  aes(x = factor(yr_treat, levels = order_level_mg), y = Genus, fill = countfactor)) + 
+  geom_tile(colour = "white", size = 0.4)+
+  scale_fill_manual(values = rev(c("grey90", RColorBrewer::brewer.pal(n = 5, name = "YlOrRd"))), na.value = "grey90")+
+  theme_grey(base_size = 10)+
+  guides(fill =guide_legend(title = str_wrap("Number of sequence reads (rarefied)", width = 20)))+
+  labs(x = "Distance to cut and year", y = "Genus", title = "Occurence of OTU Genus by distance to cut and by year")+
+  scale_x_discrete(labels = order_level_simpl)
+
+htmap_all
+```
+
+# *3 HALASEN STUDY: TREATMENT + YEAR*
+## 3.0 design and sampling
+```{r overview }
+# sampling design
+colnames(sam)
+summary(sam[,c(2,5:8)])
+
+# post biomol design
+table_postbiomol <- table(sam_hala$zone, sam_hala$plot) # post biomol
+table_postbiomol <- table_postbiomol[, plot_list] %>% print()
+rowSums(table_postbiomol) ## N = 3 missing in initial sample_data matrix (64 samples in design) missing after the biomolecular analysis
+### plots: 2 (FOR, n=1); 9 (FOR, n=2)
+n_postbiomol <- length(sam_hala$sample_id) %>% print()
+# balanced now after resampling of forest 
+
+# post bioinf design
+table_postbioinf <- table(ecm_phy@sam_data$zone, ecm_phy@sam_data$plot) # post bioinf
+table_postbioinf <- table_postbioinf[, plot_list] %>% print()
+rowSums(table_postbioinf) ## after clean_pq 
+## 2 (n=1); 9 (n=2); 3 (n=3); 8 (n=1) -> N= 4 
+n_postbionf <- length(ecm_phy@sam_data$sample_id) %>% print()
+
+# not present in otu_table:
+sam_hala[which(rownames(sam_hala) %in% rownames(otu_fungi_t0) == FALSE), ]
+sam_hala$sample_id[which(rownames(sam_hala) %in% rownames(otu_fungi_t0) == FALSE)] %>% print()
+## samples missing from otu table (during clustering scata)
+### is this a pb in tag matching ? 
+
+Ntreat12
+Ntreat18
+
+# 0 ECM sample: 
+which(colSums(ecm_phy@otu_table) == 0) 
+ecm_phy@sam_data[which(colSums(ecm_phy@otu_table) == 0)]
+## sample with 0 ECM read 
+
+## --> total missing : 4 + 3 = 7 (64 - 7 = 57)
+
+# design table
+summary(as.factor(sam$treatment)) 
+summary(as.factor(ecm_phy@sam_data$zone))
+
+tableall <- table(ecm_phy@sam_data$zone, ecm_phy@sam_data$plot) %>% print() %>% as.data.frame.matrix() 
+
+tableall <- tableall[, plot_list] %>% print() # reordering column as similar as design
+
+table12 <- table(ecm_12@sam_data$zone, ecm_12@sam_data$plot) %>% as.data.frame.matrix()
+table12 <- table12[, plot_list] %>% print() # not working bc not all forest plot are present anymore after resampling
+
+table18 <- table(ecm_18@sam_data$zone, ecm_18@sam_data$plot) %>% as.data.frame.matrix()
+table18 <- table18[, plot_list] %>% print()
+
+sum(table12)+sum(table18) # verif ok
+Nall <- rowSums(tableall) %>% print()
+Nyear12 <- sum(table12) %>% print()
+Nyear18 <- sum(table18) %>% print()
+Ntreat12 <- rowSums(table12) %>% print()
+Ntreat18 <- rowSums(table18) %>% print()
+
+# nb genus
+colnames(ecm_phy@tax_table)
+as.factor(ecm_phy@tax_table[,5]) %>% droplevels() %>% levels() 
+genus_nb_hala <- as.factor(ecm_phy@tax_table[,5]) %>% droplevels() %>% levels() %>% length()
+## 27 genus
+## attribution facolors, or whatever to have proper constrasted colors on graphicals representations
+
+##### checking cluster nb etc
+phytax_df <- data.frame(phy@tax_table) %>% lapply(as.factor) %>% data.frame()
+rownames(phytax_df) <- rownames(phy@tax_table)
+str(phytax_df)
+summary_all <- summary(phytax_df) %>% print()
+summary_all_df <- data.frame(unclass(summary(phytax_df)), check.names = FALSE, stringsAsFactors = FALSE)
+
+str(ecmtax_df)
+summary_ecm <- summary(ecmtax_df) %>% print()
+summary_ecm_df <- data.frame(unclass(summary(ecmtax_df)), check.names = FALSE, stringsAsFactors = FALSE)
+
+level_order_ecmtax <- c("Phylum", "Class", "Family", "Genus", "Fruitbody")
+
+# should be better if arrange in proper order
+
+colnames(ecm_phy@otu_table)
+colSums(ecm_phy@otu_table) %>% summary()
+# total changes from colsums just after rarefaction because not_ecm clusters are supressed
+colSums(phy@otu_table) %>% summary 
+
+hist(colSums(ecm_phy@otu_table))
+
+## clusters--OTU in control
+clusters_in_controls
+```
+```{r summary results}
+
+sum_res <- ecmtax_df[, c("Phylum", "Class", "Genus", "Family", "Fruitbody")] %>%
+  gather(variable, value) %>%
+  ggplot()+
+  geom_bar(aes(x = factor(variable, levels = level_order_ecmtax), y = ..count../sum(..count..)*5, fill = value), color= " black", position = "stack", show.legend = FALSE)+
+  geom_text(stat = "count", aes(x = variable, label =  value,  y = ..count../sum(..count..)*5, group = value), position = "stack", vjust = 1, alpha = 1)+
+  scale_y_continuous(labels = scales::percent)+
+  ylab("") # 5 because of the nb of variables
+sum_res
+```
+
+- change between 2012 2018 (see below) -> could be explained by a difference in the biomolecular methods ? we should not expect any difference in forest control treatment between years
+
+## 3.1 stat test TY
+```{r indexes model treatment * year }
+summary(rich)
+summary(div)
+summary(even)
+
+str(df_div)
+
+bxplt_rich <- df_div %>%
+  ggplot(aes(x = factor(zone, levels = order_level), y = rich, fill =  zone))+
+  geom_boxplot(width = 0.4, color = "black") +
+  coord_cartesian(ylim=c(0,15))+
+  scale_y_continuous(name = "OTU richness", breaks = seq(0, 15, by = 2))+
+  theme(axis.text.x=element_text(color="coral4", size = 11, angle = 0))+
+  facet_grid(~ year) +
+  theme(legend.position="none", plot.title = element_text(size = 14)) +
+  labs(title = "ECM OTU richness by distance from cut")+
+  xlab("Distance from cut")+
+  guides(fill = guide_legend(title = str_wrap("Distance from cut", width = 20)))+
+  scale_fill_manual(values = coltreatment)
+bxplt_rich
+
+table(df_div$plot, df_div$rich)
+
+# variation 
+mean12 <- aggregate(df_div12$rich, by = list(df_div12$zone), FUN = mean) %>% print()
+
+sd12 <- aggregate(df_div12$rich, by = list(df_div12$zone), FUN = sd) %>% print()
+
+mean18 <- aggregate(df_div18$rich, by = list(df_div18$zone), FUN = mean) %>% print()
+sd18 <-  aggregate(df_div18$rich, by = list(df_div18$zone), FUN = sd) %>% print()
+
+
+summary(as.factor(df_div$zone))
+```
+```{r relative abundance}
+genus_nb_sapr <- as.factor(sapr_phy@tax_table[,5]) %>% droplevels() %>% levels() %>% length() %>% print()
+genus_nb_ecm <- as.factor(ecm_phy@tax_table[,5]) %>% droplevels() %>% levels() %>% length() %>% print()
+## OTU Genus count (0;1) by treatment
+phy_ggplot1 <- phyloseq::plot_bar(as_binary_otu_table(physeq), x = "zone") 
+
+phy_ggplot1 <- ggplot(phy_ggplot1$data, aes(fill= fct_reorder(as.factor(primary_lifestyle), Abundance), x = factor(zone, levels = order_level), y = Abundance))+
+  geom_bar(stat = "identity", position = "stack") +
+  facet_grid(~year, scale="free")+
+  labs(title="OTU Genus count (0;1) by position from SC and year")+
+  xlab("position from SC")+
+  guides(fill=guide_legend(title="Genus"))+
+  theme(axis.text.x=element_text(color="coral4", size=8, angle=20))
+phy_ggplot1
+
+# plotting 
+bxplt_comp <- df_div_relat %>% ggplot(aes(x = factor(zone, levels = order_level), y = richness, fill =  primary_lifestyle))+
+  geom_boxplot(width = 0.35, color = "black") +
+  coord_cartesian(ylim=c(0,15))+
+  scale_y_continuous(name = "OTU richness", breaks = seq(0, 15, by = 2))+
+  theme(axis.text.x=element_text(color="coral4", size = 11, angle = 0))+
+  facet_grid(~ year) +
+  theme(legend.position="right", plot.title = element_text(size = 14)) +
+  labs(title = "OTU richness by cutting position and lifestyle")+
+  xlab("Position from cutting")+
+  scale_fill_manual(values = c("#626567", "#D7DBDD"))
+bxplt_comp
+
+bxplt_relat <- ecm_abun_df %>% ggplot(aes(x = factor(zone, levels = order_level), y = ecm_abun, fill = zone))+
+  geom_boxplot(width = 0.4, color = "black") +
+  coord_cartesian(ylim=c(0,1))+
+  scale_y_continuous(name = "ECM proportion", breaks = seq(0, 1, by = 0.1))+
+  theme(axis.text.x=element_text(color="coral4", size = 11, angle = 0))+
+  facet_grid(~ year) +
+  theme(legend.position = "none", plot.title = element_text(size = 14)) +
+  scale_fill_manual(values = coltreatment)+
+  labs(title = "ECM proportion by distance from cut")+
+  xlab("Distance from cut")
+bxplt_relat
+
+# variation 
+sd12_prop <- aggregate(ecm_abun_df12$ecm_abun, by = list(ecm_abun_df12$zone), FUN = sd) %>% print()
+sd18_prop <-  aggregate(ecm_abun_df18$ecm_abun, by = list(ecm_abun_df18$zone), FUN = sd) %>% print()
+mean(ecm_abun_df18$ecm_abun[ecm_abun_df18$zone == "CCFM"])
+
+mean12_prop <- aggregate(ecm_abun_df12$ecm_abun, by = list(df_div12$zone), FUN = mean) %>% print()
+mean18_prop <- aggregate(ecm_abun_df18$ecm_abun, by = list(df_div18$zone), FUN = mean) %>% print()
+```
+```{r MODEL }
+# https://stats.stackexchange.com/questions/31569/questions-about-how-random-effects-are-specified-in-lmer
+## for constructing model with random effects
+
+## for interaction : 
+## ":" or "*" -> figure which symbol is appropriate
+
+# spatial autocorrelation -> lags ? to consider into glmm. is that also possible to perform glmm if autocorrelation anyways ?
+## using ape package , moran's index 
+# if so, correct 
+
+# not possible to put in random effect a variable that is NA for levels of other variable (eg stream with CCFM from treatment)
+# glmer non hypothesis of normality, so just plot(model) .> fitted values by 
+
+# verif assumption for glmm
+summary(rich)
+summary(ecm_abun)
+par(mfrow = c(1, 2))
+hist(rich, breaks = seq(0, 15, by = 1))
+hist(ecm_abun, breaks = seq(0, 1, by = 0.1))
+hist(log(ecm_abun))
+par(mfrow = c(1, 1))
+
+# GLMM richness 
+glmm_rich <- lme4::glmer(rich ~ zone * year +
+                           (1 | plot),
+                         family = poisson(link = "log"),
+                         data = df_div) 
+glmm_richred <- lme4::glmer(rich ~ (1 | plot),
+                         family = poisson(link = "log"),
+                         data = df_div) 
+
+car::Anova(glmm_rich, type = "III")
+anova(glmm_rich, glmm_richred) # likely-hood ration test (LRT test) # where dff is the number of parameters that vary between the 2 models
+summary(glmm_rich)
+pair_glmm_rich <- emmeans(glmm_rich, ~ zone * year, type = "response")
+pairs(pair_glmm_rich)
+tab_model(glmm_rich, show.df = TRUE)
+
+# GLMM richness 2012
+glmm_rich12 <- lme4::glmer(rich ~ zone +
+                           (1 | plot),
+                         family = poisson(link = "log"),
+                         data = df_div12) 
+glmm_rich12red <- lme4::glmer(rich ~ (1 | plot),
+                         family = poisson(link = "log"),
+                         data = df_div12) 
+
+car::Anova(glmm_rich12, type = "III")
+anova(glmm_rich12, glmm_rich12red)
+summary(glmm_rich12)
+drop1(glmm_rich12, test = "Chisq")
+lrtest(glmm_rich12)
+pair_glmm_rich12 <- emmeans(glmm_rich12, ~ zone, type = "response")
+pairs(pair_glmm_rich12)
+
+# GLMM richness 2018
+glmm_rich18 <- lme4::glmer(rich ~ zone +
+                           (1 | plot),
+                         family = poisson(link = "log"),
+                         data = df_div18) 
+glmm_rich18b <- lme4::glmer(rich ~
+                           (1 | plot),
+                         family = poisson(link = "log"),
+                         data = df_div18) 
+
+car::Anova(glmm_rich18, type = "III")
+drop1(glmm_rich18)
+anova(glmm_rich18, glmm_rich18red)
+summary(glmm_rich18)
+lrtest(glmm_prop18)
+pair_glmm_rich18 <- emmeans(glmm_rich18, ~ zone, type = "response")
+pairs(pair_glmm_rich18)
+
+# GLMM prop
+glmm_prop <- glmmTMB::glmmTMB(ecm_abun ~ zone * year +
+                        (1 | plot),
+                        family = beta_family(link = "logit"),
+                        data = ecm_abun_df) 
+car::Anova(glmm_prop, type = "III")
+summary(glmm_prop)
+pair_glmm_prop <- emmeans(glmm_prop, ~ zone * year, type = "response")
+pairs(pair_glmm_prop)
+
+# GLMM prop 2012
+glmm_prop12 <- glmmTMB::glmmTMB(ecm_abun ~ zone +
+                        (1 | plot),
+                        family = beta_family(link = "logit"),
+                        data = ecm_abun_df12)
+
+car::Anova(glmm_prop12, type = "III")
+summary(glmm_prop12)
+pair_glmm_prop12 <- emmeans(glmm_prop12, ~ zone, type = "response")
+pairs(pair_glmm_prop12)
+
+# GLMM prop 2018
+glmm_prop18 <- glmmTMB::glmmTMB(ecm_abun ~ zone +
+                        (1 | plot),
+                        family = beta_family(link = "logit"),
+                        data = ecm_abun_df18) 
+
+car::Anova(glmm_prop18, type = "III")
+summary(glmm_prop18)
+pair_glmm_prop18 <- emmeans(glmm_prop18, ~ zone, type = "response")
+pairs(pair_glmm_prop18)
+
+
+pchisq(summary(glm_rich)$deviance, summary(glm_rich)$df.residual) # test for testing fitting of family 
+
+par(mfrow = c(2, 2))
+plot(glm_rich) # graphical assumption tests
+par(mfrow = c(1, 1))
+
+# plot fixed effects correlation matrix
+sjPlot::plot_model(glmm_rich)
+# plot qq-plot of random effects
+sjp.glmer(fit, type = "re.qq")
+
+
+# analysis of variance (lm) or deviance (glm and glmm)
+tableall
+Nyear12; Ntreat12; Nyear18; Ntreat18
+summary(glmm_rich) # 1 
+# summary interpretation of fixed effects: 
+## intercept = CCFM + 2012 + CCFM:2012, necessarily significant because model no null (0)
+## SC and FOR are S=/= of CCFM independently of year     NB: (S=/= means significantly different)
+## year 2018 is =/= from 2012 independently of treatment
+## SC:2018 (ie in interaction) is =/= from CCFM:2012 -> SC and CCFM difference do vary through years with an observed "inversment" where richness of the edges decrease through time when richness of middle is increasing.
+## FOR:2018 is =/= from CCFM:2012 -> FOR and CCFM difference do not vary through years (a global decrease for both of treatments is observed)
+
+# summary interpretation of correlations:
+
+anova(glmm, test = "LR") # order influence significance intercept (CCFM select as intercept, alphabetically or 1st row of df.)
+summary(glmm_richtest) # 2
+anova(glmm_richtest)
+summary(glm) # 3
+anova(glm, test = "LR") # ou methode des moindres carres, etc. # function # anova (analysis of deviance) is working only for glm, not glmm
+summary(lm)
+anova(lm)
+
+anova(glm, test = "LR")
+## copied from dataset
+all.ai=manyglm(allotus.ai ~ as.numeric(Reads_mean) + Pair + as.numeric(AI), data=factors[-11,], family="negative.binomial")
+plot(all.ai)
+anova.all.ai=anova(all.ai, test="LR", resamp="perm.resid", p.uni="adjusted")
+
+# TABLE 4b #
+anova.all.ai
+
+which(anova.all.ai$uni.p[2,]<=0.05)
+which(anova.all.ai$uni.p[3,]<=0.05)
+which(anova.all.ai$uni.p[4,]<=0.05)
+##
+
+predict(glmm_want)
+plot(glmm_want) # distribution res 
+VarCorr(glmm_want)
+
+#calculate McFadden's R-squared for model
+with(summary(glm), 1 - deviance/null.deviance)
+
+# pairwise comparisons
+tuk <- emmeans(glm, "zone")
+contrast(tuk, "pairwise", adjust = "Tukey")
+
+emmeans(glm, pairwise ~ zone : year) # possible to do pairwise on interaction
+emmeans(lm, pairwise ~ zone)
+TukeyHSD(aov(lm))
+
+##
+# assumption test for model
+hist(rich) # not normal : poisson distribution lambda = 2 
+
+boxplot(rich ~ zone, data = df_div)
+
+par(mfrow=c(1, 3))
+hist(rich_) # graphical distrib
+hist(residuals(glmm_want))
+hist(residuals(lm_rich))
+shapiro.test(glmm_want) # shapiro tests
+shapiro.test(residuals(glmm_want))
+shapiro.test(residuals(lm_rich))
+
+par(mfrow=c(2, 2))
+plot(glmm_rich_pois)
+qqnorm(residuals(glmm_want))
+qqline(residuals(glmm_want))
+
+par(mfrow=c(1,1))
+
+shapiro.test(lm_rich$res) # OK
+dwtest(lm_rich)  # OK
+bptest(lm_rich)  # OK
+anova(lm_rich)
+summary(lm_rich)
+TukeyHSD(aov(lm_rich), "specification_value")
+
+summary(glmm_rich_pois)
+
+
+boxplot(rich_ ~ ecm_phy@sam_data$specification_value)
+
+# model all addition ## TO RESOLVE AND CHOOSE
+str(df_div)
+
+lm_div <- lm(rich_ ~ orient + stream, data = df_div) 
+
+par(mfrow=c(2,2))
+plot(lm_div)
+par(mfrow=c(1,1))
+hist(lm_div$res)
+shapiro.test(lm_div$res) # OK
+dwtest(lm_div)  # OK
+bptest(lm_div)  # OK
+Anova(lm_div, type="II")
+anova(lm_div)
+TukeyHSD(aov(lm_div), "specification_value")
+
+boxplot(rich_hala ~ ecm_phy@sam_data$specification_value)
+```
+
+## 3.2.1 alpha TY
+```{r rarecurve}
+# maybe consider the nb of samples (to limit biais in unbalanced design
+min(rowSums(yr_12@otu_table))
+hala_rrcurve_groups1 <- phyloseq.extended::ggrare(yr_12, step = 10, color = "zone",plot=F, se=T)+ 
+  facet_wrap(~ year)+
+  coord_cartesian(ylim = c(1, max(vegan::specnumber(yr_12@otu_table))))+
+  scale_x_continuous(breaks = seq(0, max(rowSums(yr_12@otu_table)), by = 200))+
+  scale_y_continuous(breaks = seq(0, max(vegan::specnumber(yr_12@otu_table)), by = 5))+
+  geom_vline(xintercept = min(rowSums(yr_18@otu_table)), color = "coral4")+
+  labs(x = "Group size",
+       y =  "OTU richness",
+       title = "Rarefaction curves by distance from cut",
+       color = "Treatment")+
+  theme(legend.position = c(0.9, 0.6))+
+  guides(fill = F, title = str_wrap("Distance from cut", width = 20))+
+  annotate("text", x = 190, y = 4, label = str_wrap("n = 179", width = 20), size = 3.5, angle=0, color = "coral4", hjust = 0)+
+  scale_color_manual(values = coltreatment_raref)+
+  scale_fill_manual(values = coltreatment_raref)
+hala_rrcurve_groups1
+# Group size = (ie sum of samples reads per group)
+
+min(rowSums(yr_18@otu_table))
+hala_rrcurve_groups2 <- phyloseq.extended::ggrare(yr_18, step = 10, color = "zone",plot=F, se=T)+ 
+  facet_wrap(~year)+
+  geom_vline(xintercept = min(rowSums(yr_18@otu_table)), color = "coral4")+
+  coord_cartesian(ylim = c(1, max(vegan::specnumber(yr_18@otu_table))))+
+  scale_x_continuous(breaks = seq(0, max(rowSums(yr_18@otu_table)), by = 200))+
+  scale_y_continuous(breaks = seq(0, max(vegan::specnumber(yr_18@otu_table)), by = 5))+
+  labs(x = "Group size",
+       y =  "OTU richness",
+       title = "Rarefaction curves by distance from cut",
+       color = "Treatment")+
+  guides(fill = F)+ # Suppressing the filling (standard error) legend 
+  theme(legend.position = c(0.85, 0.6))+
+  annotate("text", x = 190, y = 2, label = str_wrap("n = 179", width = 20), size = 3.5, angle=0, color = "coral4", hjust = 0)+
+  scale_color_manual(values = coltreatment_raref)+
+  scale_fill_manual(values = coltreatment_raref)
+hala_rrcurve_groups2
+
+hala_rrcurve <- phyloseq.extended::ggrare(ecm_phy, step = 10, color = "zone", plot = F, se=T)+
+  labs(x = "Group size",
+       y =  "OTU richness",
+       title = "rarefaction curves by treatment",
+       color = "Treatment")
+hala_rrcurve
+```
+```{r circle graph: genus distribution among treatments}
+circle_pq(physeq = ecm_phy, 
+                              fact = "zone", 
+                              taxa = "Genus", 
+                              min_prop_mod=0.001,
+                              min_prop_tax=0.01,
+                              row_col = c("SC" = "darkred",
+                                          "CCFM" = "orange",
+                                          "FOR" = "darkgreen"),
+                              grid_col= 1,
+                              add_nb_seq = T)
+```
+```{r alpha diversity indexes on otu}
+plot_richness(ecm_phy, measures = c("Chao1", "ACE", "InvSimpson"), nrow=3, sortby = "Chao1", x = "zone")
+
+hala_hill_treatment <- hill_pq(physeq = ecm_phy_t, 
+                               variable = "zone",
+                               color_fac = NA, 
+                               letters = F)
+  
+
+hala_hill0 <- hala_hill_treatment[[1]]+ 
+  labs(title="Hill 0 : Distance from cut", subtitle="Hagadalen_edge")+
+  coord_cartesian(xlim=c(0,16))+
+  scale_x_continuous(name="Hill_0", breaks = seq(0,16,by = 2))+
+  scale_y_continuous(name="Distance from SC", breaks=c(1,2,3))+
+  scale_color_manual(values = c("SC" = "darkred",
+                                "CCFM" = "orange",
+                                "FOR" = "darkgreen"))+
+  theme(axis.text.x=element_text(color="coral4", size=8, angle=0))
+hala_hill0
+
+hala_hill1 <- hala_hill_treatment[[2]]+ 
+  labs(title="Hill 1 : Distance from cut", subtitle="Hagadalen_edge")+
+  coord_cartesian(xlim=c(0,12))+
+  scale_x_continuous(name="Hill_1", breaks=seq(0,12,by=2))+
+  scale_y_continuous(name="Distance from SC", breaks=c(1,2,3))+
+  scale_color_manual(values = c("CCFM" = "orange",
+                                "SC" = "darkred",
+                                "FOR" = "darkgreen"))+
+  theme(axis.text.x=element_text(color="coral4", size=8, angle=0))
+hala_hill1
+
+hala_hill2 <- hala_hill_treatment[[3]]+ 
+  labs(title="Hill 2 : Distance from SC", subtitle="Hagadalen_edge")+
+  coord_cartesian(xlim=c(0,10))+
+  scale_x_continuous(name="Hill_2", breaks=seq(0,10,by=2))+
+  scale_y_continuous(name="Distance from SC", breaks=c(1,2,3))+
+  scale_color_manual(values = c("CCFM" = "orange",
+                                "SC" = "darkred",
+                                "FOR" = "darkgreen"))+
+  theme(axis.text.x=element_text(color="coral4", size=8, angle=0))
+hala_hill2
+
+hala_hill_treatment[[4]]
+hala_hill_treatment[[4]] # TukeyHSD test
+```
+```{r barplot genus distribution - occurence}
+# tirage aleatoire pour nb d'echantillon (bootstrap ?) to compensate effect of Nforest 
+
+genus_nb_hala <- as.factor(ecm_phy@tax_table[,5]) %>% droplevels() %>% levels() %>% length() %>% print()
+## OTU Genus count (0;1) by treatment
+ecm_phy_ggplot1 <- phyloseq::plot_bar(as_binary_otu_table(ecm_phy), x = "zone") 
+ecm_phy_ggplot1 <- ggplot(ecm_phy_ggplot1$data, aes(fill= fct_reorder(as.factor(Genus), Abundance), x = factor(zone, levels = order_level), y = Abundance))+
+  geom_bar(stat = "identity", position = "stack") +
+  scale_fill_manual(values = funky(genus_nb_hala))+
+  facet_grid(~year, scale="free")+
+  labs(title="OTU Genus presence-absence by distance from cut and by year")+
+  xlab("Distance from cut")+
+  ylab("OTU Genus count")+
+  guides(fill=guide_legend(title="Genus"))+
+  theme(axis.text.x = element_text(color="black", size=8, angle=20))+
+  theme(legend.key.size = unit(0.4, 'cm'), #change legend key size
+        legend.key.height = unit(0.4, 'cm'), #change legend key height
+        legend.key.width = unit(0.4, 'cm'), #change legend key width
+        legend.title = element_text(size = 11), #change legend title font size
+        legend.text = element_text(size = 9)) #change legend text font size
+ecm_phy_ggplot1
+Ntreat12
+Ntreat18
+
+# OTU Genus abundance by treatment
+ecm_phy_ggplot2 <- phyloseq::plot_bar(ecm_phy, x = "zone") 
+ecm_phy_ggplot2 <- ggplot(ecm_phy_ggplot2$data, aes(fill= fct_reorder(as.factor(Genus), Abundance), x = factor(zone, levels = order_level), y = Abundance))+
+  geom_bar(stat="identity", position = "stack")+
+  scale_fill_manual(values = funky(genus_nb_hala))+
+  facet_grid(~year, scale="free")+
+  labs(title="OTU Genus abundance by distance from cut and by year")+
+  xlab("Distance from cut")+
+  ylab("Number of seq. reads")+
+  guides(fill=guide_legend(title="Genus"))+
+  theme(axis.text.x=element_text(color="black", size=8, angle=20))+
+  theme(legend.key.size = unit(0.4, 'cm'), #change legend key size
+        legend.key.height = unit(0.4, 'cm'), #change legend key height
+        legend.key.width = unit(0.4, 'cm'), #change legend key width
+        legend.title = element_text(size = 11), #change legend title font size
+        legend.text = element_text(size = 9)) #change legend text font size
+ecm_phy_ggplot2
+```
+```{r barplot genus distribution - proportion}
+# tirage aleatoire pour nb d'echantillon (bootstrap ?) to compensate effect of Nforest 
+
+genus_nb_hala <- as.factor(ecm_phy@tax_table[,5]) %>% droplevels() %>% levels() %>% length() %>% print()
+## OTU Genus count (0;1) by treatment
+ecm_phy_ggplot1_prop <- phyloseq::plot_bar(as_binary_otu_table(ecm_phy), x = "zone") 
+ecm_phy_ggplot1_prop <- ggplot(ecm_phy_ggplot1_prop$data, aes(fill= fct_reorder(as.factor(Genus), Abundance), x = factor(zone, levels = order_level), y = Abundance))+
+  geom_bar(stat = "identity", position = "fill") +
+  scale_fill_manual(values = funky(genus_nb_ecm))+
+  facet_grid(~year, scale="free")+
+  labs(title="OTU Genus presence-absence by distance from cut and by year")+
+  xlab("Distance from cut")+
+  ylab("OTU Genus count")+
+  guides(fill=guide_legend(title="Genus"))+
+  theme(axis.text.x = element_text(color="black", size=8, angle=20))+
+  theme(legend.key.size = unit(0.4, 'cm'), #change legend key size
+        legend.key.height = unit(0.4, 'cm'), #change legend key height
+        legend.key.width = unit(0.4, 'cm'), #change legend key width
+        legend.title = element_text(size = 11), #change legend title font size
+        legend.text = element_text(size = 9)) #change legend text font size
+ecm_phy_ggplot1_prop
+Ntreat12
+Ntreat18
+
+# OTU Genus abundance by treatment
+ecm_phy_ggplot2_prop <- phyloseq::plot_bar(ecm_phy, x = "zone") 
+ecm_phy_ggplot2_prop <- ggplot(ecm_phy_ggplot2_prop$data, aes(fill= fct_reorder(as.factor(Genus), Abundance), x = factor(zone, levels = order_level), y = Abundance))+
+  geom_bar(stat="identity", position = "fill")+
+  scale_fill_manual(values = funky(genus_nb_hala))+
+  facet_grid(~year, scale="free")+
+  labs(title="OTU Genus proportion by distance from cut and by year")+
+  xlab("Distance from cut")+
+  ylab("OTU Genus proportion")+
+  guides(fill=guide_legend(title="Genus"))+
+  theme(axis.text.x=element_text(color="black", size=8, angle=20))+
+  theme(legend.key.size = unit(0.4, 'cm'), #change legend key size
+        legend.key.height = unit(0.4, 'cm'), #change legend key height
+        legend.key.width = unit(0.4, 'cm'), #change legend key width
+        legend.title = element_text(size = 11), #change legend title font size
+        legend.text = element_text(size = 9)) #change legend text font size
+ecm_phy_ggplot2_prop
+```
+```{r barplot OTUs distribution}
+otu_nb_hala <- as.factor(ecm_phy@tax_table[,6]) %>% droplevels() %>% levels() %>% length()
+## OTU count (0;1) by treatment
+ecm_phy_ggplot3 <- phyloseq::plot_bar(as_binary_otu_table(ecm_phy), x = "zone") 
+ecm_phy_ggplot3 <- ggplot(ecm_phy_ggplot3$data, aes(fill= fct_reorder(as.factor(OTU_ID), Abundance), x=zone, y = Abundance))+
+  geom_bar(stat="identity", position = "stack") +
+  scale_fill_manual(values = funky(otu_nb_hala))+
+  facet_grid(~year, scale="free")+
+  labs(title="OTU Genus count (0;1) by distance from cut and by year")+
+  xlab("position from SC")+
+  guides(fill=guide_legend(title="Genus"))+
+  theme(axis.text.x=element_text(color="coral4", size=8, angle=20))
+ecm_phy_ggplot3
+```
+```{r boxplot}
+# OTU richness 
+
+hala_box1 <- ggplot( aes(x=name, y=value, fill=name)) +
+    geom_boxplot() +
+    scale_fill_viridis(discrete = TRUE, alpha=0.6) +
+    geom_jitter(color="black", size=0.4, alpha=0.9) +
+    theme_ipsum() +
+    theme(
+      legend.position="none",
+      plot.title = element_text(size=11)
+    ) +
+    ggtitle("A boxplot with jitter") +
+    xlab("")
+
+phyloseq::psmelt(ecm_phy) %>%
+ggplot(data = ., aes(x = zone, y = Abundance)) +
+  geom_boxplot(outlier.shape  = NA) +
+  geom_jitter(aes(color = ), height = 0, width = 0.2) +
+  labs(x = "Treatment", y = "Abundance")+
+  facet_wrap(~ year)
+
+phyloseq::psmelt(fanga_ecm) %>%
+ggplot(data = ., aes(x = treatment, y = Abundance)) +
+  geom_boxplot(outlier.shape  = NA) +
+  geom_jitter(aes(color = ), height = 0, width = 0.2) +
+  labs(x = "Treatment", y = "Abundance")+
+  facet_wrap(~ year)
+
+# abundance
+
+hala_box2 <- boxplot_abundance(d= ecm_phy, x='zone', y='otu_table',
+   line='subject')
+```
+
+## 3.2.2 multivariate analysis TY
+```{r fruitbody type}
+fruit_nb <- as.factor(ecm_phy@tax_table[,8]) %>% droplevels() %>% levels() %>% length() %>% print()
+## Genus abundance by treatment
+ecm_phy_fruit1 <- phyloseq::plot_bar(ecm_phy, x = "zone") 
+ecm_phy_fruit1 <- ggplot(ecm_phy_fruit1$data, aes(fill= fct_reorder(as.factor(Fruitbody), Abundance), x = zone, y = Abundance))+
+  geom_bar(stat = "identity", position = "stack") +
+  scale_fill_manual(values = funky(fruit_nb))+
+  facet_grid(~ year, scale="free")+
+  labs(title="Genus abundance by distance from cut and by year")+
+  xlab("Distance from cut")+
+  guides(fill=guide_legend(title="Fruitbody"))+
+  theme(axis.text.x=element_text(color="coral4", size=8, angle=20))
+ecm_phy_fruit1
+
+## % 
+fruit_count <- ecm_phy_fruit1$data %>% group_by(Fruitbody, year, zone) %>%
+  dplyr::summarise(sumcount = sum(Abundance, na.rm = TRUE)) %>% as.data.frame()
+
+# chi-squared goodness-of-fit test
+fruit12_chi <- chisq.test(x = fruit12, correct = F)
+fruit18_chi <- chisq.test(x = fruit18, correct = F)
+fruit12_chi
+fruit18_chi
+
+fruit12_chi$observed
+round(fruit12_chi$expected, 0)
+round(fruit12_chi$residuals, 1) # pearson residuals
+
+fruit18_chi$observed
+round(fruit18_chi$expected, 0)
+round(fruit18_chi$residuals, 1) # pearson residuals
+
+# GRAPHICAL
+# 1. convert the data as a table
+fruit12tab <- as.table(as.matrix(fruit12))
+fruit18tab <- as.table(as.matrix(fruit18))
+# 2. Graph
+par(mfrow = c(1, 2))
+balloonplot(t(fruit12tab), main ="", xlab ="", ylab="",
+            label = FALSE, show.margins = FALSE)
+balloonplot(t(fruit18tab), main ="", xlab ="", ylab="",
+            label = FALSE, show.margins = FALSE)
+
+# correlation plot
+corrplot(fruit12_chi$residuals, is.cor = FALSE)
+corrplot(fruit18_chi$residuals, is.cor = FALSE)
+```
+
+```{r OTU Genus composition}
+# phylum
+
+asc <- which(sum_res$data == "Ascomycota") %>% length()
+bas <- which(sum_res$data == "Basidiomycota") %>% length()
+pourc_asc <- (asc / (asc + bas))*100; pourc_asc
+pourc_bas <- (bas / (asc + bas))*100; pourc_bas
+# % of occurence among samples 
+
+occurence_pourc_12 <- pourc_genusdf12b %>%
+mutate(class = fct_reorder(Genus, pourc, .fun='max')) %>%
+  ggplot( aes(x = reorder(Genus, pourc), y = pourc, fill = yr_treat_genus)) + 
+  geom_bar(position = "stack", stat="identity", alpha = 1, width = 1, color = "black")+
+  scale_fill_manual(values = coltreatment)+
+  coord_flip()+
+  labs(title = "2012")+
+  scale_y_continuous(name = "Occurence of OTU for each sample type (in %)", breaks = seq(from = 0, to = 120, by = 20))+
+  xlab("OTU Genus")+
+  guides(fill = guide_legend(title = "Distance from cut"))+
+  theme(axis.text.y = element_text(color="black", size = 4.5, angle=0), legend.position = c(0.85,0.3))
+occurence_pourc_12
+
+occurence_pourc_18 <- pourc_genusdf18b %>%
+mutate(class = fct_reorder(Genus, pourc, .fun='max')) %>%
+  ggplot( aes(x = reorder(Genus, pourc), y = pourc, fill = yr_treat_genus)) + 
+  geom_bar(position = "stack", stat="identity", alpha = 1, width = 1, color = "black")+
+  scale_fill_manual(values = coltreatment)+
+  coord_flip()+
+  labs(title = "2018")+
+  scale_y_continuous(name = "Occurence of OTU for each sample type (in %)", breaks = seq(from = 0, to = 140, by = 20))+
+  xlab("OTU Genus")+
+  guides(fill = guide_legend(title = "Distance from cut"))+
+  theme(axis.text.y = element_text(color="black", size = 4.5, angle=0), legend.position = c(0.85,0.3))
+occurence_pourc_18
+
+# number of singletons 
+singleton_count12 <- length(which(colSums(osam12[, c(4:ncol(osam12))]) == 1))
+total_count12 <-length(which(colSums(osam12[, c(4:ncol(osam12))]) >= 1))
+pourc_sing12 <- singleton_count12/total_count12*100
+
+singleton_count18 <-length(which(colSums(osam18[, c(4:ncol(osam18))]) == 1))
+total_count18 <-length(which(colSums(osam18[, c(4:ncol(osam18))]) >= 1))
+pourc_sing18 <- singleton_count18/total_count18*100
+
+# print
+singleton_count12; total_count12 # 2012: sing count; total count 
+pourc_sing12 # 2012% singletons
+
+singleton_count18; total_count18 # 2018: sing count; total count 
+pourc_sing18 # 2018% singletons
+
+## most abundant OTU genus :
+### >25% occurrence in all samples
+
+abun_otu12 <- which(colSums(pourc_genusdf12[, c(2:ncol(pourc_genusdf12))])/nrow(pourc_genusdf12) >= 25)
+abun_otu12 
+abun_otu18 <- which(colSums(pourc_genusdf18[, c(2:ncol(pourc_genusdf18))])/nrow(pourc_genusdf18) >= 25)
+abun_otu18 
+
+# most abundant and frequent genus:
+
+# 2012: 
+## Genus richness (and theirn nb of OTU)
+colnames(ecm_12@tax_table)
+tab_abund12 <- table(ecm_12@tax_table[, 5]) 
+tab_abund12 <- tab_abund12[rev(order(tab_abund12))] 
+tab_abund12
+
+# 2018: 
+## Genus richness (and theirn nb of OTU)
+colnames(ecm_18@tax_table)
+tab_abund18 <- table(ecm_18@tax_table[, 5]) 
+tab_abund18 <- tab_abund18[rev(order(tab_abund18))] 
+
+## Genus abundance (total read of OTU)
+sum_by_level <- aggregate(Abundance ~ Genus+ year, data = ecm_phy_ggplot2$data, sum) %>% arrange(rev(desc(year)), desc(Abundance))
+sum_by_level <- data.frame(sum_by_level)
+
+## total nb of genus
+genus_nb_hala <- as.factor(ecm_phy@tax_table[,5]) %>% droplevels() %>% levels() %>% length() %>% print()
+## specific to 2012
+spe2012 <- setdiff(ecm_12@tax_table[, 5], ecm_18@tax_table[, 5]); spe2012
+## specific to 2018 
+spe2018 <- setdiff(ecm_18@tax_table[, 5], ecm_12@tax_table[, 5]); spe2018
+
+## specific to FOR 
+spe_for <- setdiff(ecm_for@tax_table[, 5], union(ecm_edg@tax_table[, 5], ecm_cut@tax_table[, 5])); spe_for
+## specific to CCFM
+spe_edg <- setdiff(ecm_edg@tax_table[, 5], union(ecm_for@tax_table[, 5], ecm_cut@tax_table[, 5])); spe_edg
+## specific to SC 
+spe_cut <- setdiff(ecm_cut@tax_table[, 5], union(ecm_for@tax_table[, 5], ecm_edg@tax_table[, 5])); spe_cut
+
+```
+
+```{r multivariate representation}
+# plotting OTUs instead of samples to see which OTU drive the samples in the ordination
+# if possible, othewise, try CA
+
+# jaccard
+ecm_phy_ordi_mdsjacc <- ordinate(as_binary_otu_table(ecm_phy), method = "MDS", dist="jaccard")
+ecm_phy_ordi_mdsjacc <- plot_ordination(ecm_phy, ecm_phy_ordi_mdsjacc, type = "samples", color="zone",label="sample_id")+
+  geom_point(size=2)+
+  facet_wrap(~year)+
+  # color and elipse
+  scale_color_manual(values = coltreatment_raref)+
+  stat_ellipse(type="t", level=0.70)+
+  # legend
+  guides(color=guide_legend(title="Distance from cut"))+
+  ggtitle(label = "MDS of samples grouped by distance from cut and by year", subtitle="presence-absence (Jaccard index)")
+ecm_phy_ordi_mdsjacc
+
+# bray
+ecm_phy_ordi_mdsbray <- ordinate(ecm_phy, method = "MDS", dist="bray")
+ecm_phy_ordi_mdsbray <- plot_ordination(ecm_phy, ecm_phy_ordi_mdsbray, type="samples", color="zone",label="sample_id")+
+  geom_point(size=2)+
+  # color and elipse
+  scale_color_manual(values = coltreatment_raref)+
+  stat_ellipse(type="t", level=0.70)+
+  # legend
+  guides(color=guide_legend(title="Distance from SC"))+
+  ggtitle(label = "MDS of samples grouped by distance from cut and by year",subtitle = "number of sequence reads (bray-curtis index)")
+ecm_phy_ordi_mdsbray
+
+### BY YEAR INDEPENDANTLY 
+# Remove empty samples 
+which(colSums(ecm_12@otu_table) == 0)
+which(colSums(ecm_18@otu_table) == 0) 
+
+# s144: only one OTU, and specific to this sample 2012
+# s72 : empty sample 2018
+ecm_12_new = subset_samples(ecm_12, sample_id != "s144")
+ecm_18_new = subset_samples(ecm_18, sample_id != "s72")
+
+# 2012
+jaccard12_ord <- ordinate(ecm_12, method = "MDS", dist="jaccard", binary = T)
+jaccard12 <- plot_ordination(ecm_12, jaccard12_ord, type="samples", color="zone",label="sample_id")+
+  geom_point(size=2)+
+  # color and elipse
+  scale_color_manual(values = coltreatment_raref)+
+  stat_ellipse(type="t", level=0.70)+
+  # legend
+  guides(color=guide_legend(title="Distance from SC"))+
+  ggtitle(label = "MDS of samples grouped by distance from cut for 2012",subtitle = "number of sequence reads (jaccard index)")
+jaccard12
+
+bray12_ord <- ordinate(ecm_12, method = "MDS", dist="bray")
+bray12 <- plot_ordination(ecm_12, bray12_ord, type="samples", color="zone",label="sample_id")+
+  geom_point(size=2)+
+  # color and elipse
+  scale_color_manual(values = coltreatment_raref)+
+  stat_ellipse(type="t", level=0.70)+
+  # legend
+  guides(color=guide_legend(title="Distance from SC"))+
+  ggtitle(label = "MDS of samples grouped by distance from cut for 2012",subtitle = "number of sequence reads (bray-curtis index)")
+bray12
+
+# 2018
+jaccard18_ord <- ordinate(ecm_18, method = "MDS", dist="jaccard", binary = T)
+jaccard18 <- plot_ordination(ecm_18, jaccard18_ord, type="samples", color="zone",label="sample_id")+
+  geom_point(size=2)+
+  # color and elipse
+  scale_color_manual(values = coltreatment_raref)+
+  stat_ellipse(type="t", level=0.70)+
+  # legend
+  guides(color=guide_legend(title="Distance from SC"))+
+  ggtitle(label = "MDS of samples grouped by distance from cut for 2018",subtitle = "number of sequence reads (jaccard index)")
+jaccard18
+
+bray18_ord <- ordinate(ecm_18, method = "MDS", dist="bray")
+bray18 <- plot_ordination(ecm_18, bray18_ord, type="samples", color="zone",label="sample_id")+
+  geom_point(size=2)+
+  scale_color_manual(values = coltreatment_raref)+
+  stat_ellipse(type="t", level=0.70)+
+  guides(color=guide_legend(title="Distance from SC"))+
+  ggtitle(label = "MDS of samples grouped by distance from cut for 2018",subtitle = "number of sequence reads (bray-curtis index)")
+bray18
+
+## eigenvalues
+ggplot()
+barplot(jaccard12_ord$values$Eigenvalues)
+barplot(bray12_ord$values$Eigenvalues)
+barplot(jaccard18_ord$values$Eigenvalues)
+barplot(bray18_ord$values$Eigenvalues)
+
+### insight 
+ecm_12@otu_table[, c("s36","s2","s113")] # just sharing Rhizopogon_mohelnensis c50
+ecm_12@otu_table[, c("s6","s144","s89")] # sharing a lot of OTU with others samples
+ecm_12@otu_table[, c("s142","s78")]
+ecm_18@otu_table[, "s146"]
+# do it with hellinger transformation (relative abundance)
+
+
+# for specification_values
+
+hala_ordi_specvalues_mdsjaSC <- ordinate(as_binary_otu_table(ecm_phy), method = "MDS", dist="jaSCard")
+ecm_phy_ordi_mdsjaSC <- plot_ordination(ecm_phy, hala_ordi_specvalues_mdsjaSC, type="samples", color="specification_value",label="sample_id")+
+  geom_point(size=2)+
+  facet_wrap(~year)+
+  # color and elipse
+  scale_color_manual(values = c("N" = "lightblue",
+                              "S" = "lightpink",
+                              "UP" = "darkblue",
+                              "LO" = "darkdarkred"))+
+  stat_ellipse(type="t", level=0.70)+
+  # legend
+  guides(color=guide_legend(title="position from SC"))+
+  ggtitle(label = "MDS of samples from Halasen_edge by year", subtitle="presence-absence (jaSCard distance)")
+ecm_phy_ordi_mdsjaSC
+```
+```{r multivariate models}
+perm <- adonis_pq(ecm_phy, "zone * year")
+perm
+
+perm_treatment <- adonis_pq(ecm_phy, "zone")
+perm_treatment
+
+perm_year <- adonis_pq(ecm_phy, "year")
+perm_year
+
+# separating years 
+## best imo 
+perm_12 <- adonis_pq(ecm_12, "zone")
+perm_12 # SI
+pw_perm12 <-pairwise.adonis2(t(ecm_12@otu_table) ~ zone, data = data.frame(ecm_12@sam_data))
+pw_perm12 
+
+perm_18 <- adonis_pq(ecm_18, "zone")
+perm_18 # NS 
+
+# corroborates what we are observing graphically 
+```
+```{r heatmap}
+# distance heatmap (bray)
+braydist = phyloseq::distance(ecm_phy, "bray")
+dist_df = reshape2::melt(as.matrix(braydist))
+colnames(dist_df) <- c("Samples1", "Samples2", "Bray_Curtis")
+
+htmp_bray <- ggplot(dist_df, aes(Samples1, Samples2, fill = Bray_Curtis)) + 
+  geom_tile()+
+  theme(axis.text.x = element_text(angle = -90, vjust = 0.5, hjust = 0)) + 
+  xlab("Samples") + ylab("Samples")
+htmp_bray
+
+# grouped heatmaps
+## by treatment 
+htmp_all <- plot_heatmap(phy_merged, method = "MDS",
+             sample.label = "yr_treat", sample.order = order_level_mg,
+             taxa.label = "OTU_ID", 
+             low = "grey", high = "red", na.value = "white")
+htmp_all
+
+ht_count0 <- htmp_all$data %>% group_by(Genus, yr_treat) %>%
+  dplyr::summarise(sumcount = sum(Abundance, na.rm = TRUE)) %>% as.data.frame()
+
+ht_count <- ht_count0 %>%
+  # convert state to factor and reverse order of levels
+  mutate(Genus = factor(Genus, levels = rev(sort(unique(Genus))))) %>%
+  # create a new variable from count
+  mutate(countfactor = cut(sumcount, breaks = c(-1, 1, 5, 10, 50, 150, 450, max(sumcount, na.rm = T)),
+                          labels=c("0", "0-1", "5-10", "10-50", "50-150", "150-450", ">450"))) %>%
+  # change level order
+  mutate(countfactor=factor(as.character(countfactor), levels=rev(levels(countfactor))))
+
+### trying to creat multi xlabel
+yr <- ifelse(grepl("2012", ht_count$yr_treat), "2012", "2018")
+treat <- ifelse(grepl("CCFM", ht_count$yr_treat), "CCFM",
+                         ifelse(grepl("SC", ht_count$yr_treat), "SC", "FOR")) # nested ifelse
+ht_count <- cbind(ht_count, yr, treat)
+### dont know.
+
+## plotting
+htmap_all <- ggplot(ht_count,  aes(x = factor(yr_treat, levels = order_level_mg), y = Genus, fill = countfactor)) + 
+  geom_tile(colour = "white", size = 0.4)+
+  scale_fill_manual(values = rev(c("grey90", RColorBrewer::brewer.pal(n = 5, name = "YlOrRd"))), na.value = "grey90")+
+  theme_grey(base_size = 10)+
+  guides(fill =guide_legend(title = str_wrap("Number of sequence reads (rarefied)", width = 20)))+
+  labs(x = "Distance to cut and year", y = "Genus", title = "Occurence of OTU Genus by distance to cut and by year")+
+  scale_x_discrete(labels = order_level_simpl)
+
+htmap_all
+
+# precise heatmap
+htmap12 <- plot_heatmap(yr_12, method = "MDS", distance = "bray",
+             sample.label = "zone", sample.order = order_level,
+             taxa.label = "OTU_ID", 
+             low = "grey", high = "red", na.value = "white")
+htmap12
+
+htmap18 <- plot_heatmap(yr_18, method = "MDS", distance = "bray",
+             sample.label = "zone", sample.order = order_level,
+             taxa.label = "OTU_ID",
+             low = "grey", high = "red", na.value = "white")
+htmap18
+
+# heatmap pourc
+
+htmap_genus <- ggplot(pourc_genusdf2,  aes(x = factor(yr_treat_genus, levels = order_level_mg), y = Genus, fill = pourc)) + 
+  geom_tile(colour = "white", size = 0.4)
+htmap_genus
+```
+```{r circle graph}
+circle_pq(ecm_phy, "zone", taxa = "Genus", add_nb_seq = F,
+          grid_col = "darkgrey",
+          row_col = coltreatment)
+```
+
+# *4 HALASEN_5P STUDY: randomly distributed retention trees*
+## 4.1 design and sampling
+```{r overview }
+colnames(hala5_sam)
+summary(hala5_sam[,c(2,5:8)])
+summary(hala5_sam$plot)
+table(hala5_sam$plot,hala5_sam$treatment)
+print(hala5_ecm@sam_data)
+
+# nb genus
+colnames(hala5_ecm@tax_table)
+as.factor(hala5_ecm@tax_table[,5]) %>% droplevels() %>% levels()
+genus_nb_hala5 <- as.factor(hala5_ecm@tax_table[,5]) %>% droplevels() %>% levels() %>% length() %>% print() # 18 genus
+```
+## 4.2.1 bivariate analysis
+```{r rarecurve}
+hala5_rrcurve0 <- phyloseq.extended::ggrare(hala5_grp, step = 10, color = "treatment",plot=F, se=T)+
+  labs(x = "Group size",
+       y =  "OTU richness",
+       title = "rarefaction curves by treatment",
+       color = "Treatment")+
+  guides(fill = F)+ # Suppressing the filling (standard error) legend 
+  scale_color_manual(values = c("forest" = "darkgreen",
+                                "thinned" = "orange",
+                                "clearcut" = "darkred"))+
+  scale_fill_manual(values = c("forest" = "darkgreen",
+                                "thinned" = "orange",
+                                "clearcut" = "darkred"))
+hala5_rrcurve0
+```
+```{r circle graph: genus distribution among treatments}
+circle_pq(physeq = hala5_ecm, 
+                              fact = "treatment", 
+                              taxa = "Genus", 
+                              min_prop_mod=0.001,
+                              min_prop_tax=0.01,
+                              row_col = c("clearcut" = "darkred",
+                                          "forest" ="darkgreen",
+                                          "thinned" = "orange"),
+                              grid_col= 1,
+                              add_nb_seq = T) # distribution circle sample - taxonomy 
+```
+```{r genus distribution}
+genus_nb_hala5 <- as.factor(hala5_ecm@tax_table[,5]) %>% droplevels() %>% levels() %>% length()
+hala5_ecm_ggplot1 <- phyloseq::plot_bar(as_binary_otu_table(hala5_ecm), x = "treatment") 
+hala5_ecm_ggplot1 <- ggplot(hala5_ecm_ggplot1$data, aes(fill= fct_reorder(as.factor(Genus), Abundance), x=treatment, y = Abundance))+
+  geom_bar(stat="identity", position = "stack") +
+  scale_fill_manual(values = cols25(genus_nb_hala5))+
+  facet_grid(~year, scale="free")+
+  labs(title="OTU Genus count (0;1) by cutting treatment",subtitle = "Halasen_P5")+
+  guides(fill=guide_legend(title="Genus"))
+hala5_ecm_ggplot1
+
+hala5_ecm_ggplot2 <- phyloseq::plot_bar(hala5_ecm, x = "treatment") 
+hala5_ecm_ggplot2 <- ggplot(hala5_ecm_ggplot2$data, aes(fill= fct_reorder(as.factor(Genus), Abundance), x=treatment, y = Abundance))+
+  geom_bar(stat="identity", position = "stack") +
+  scale_fill_manual(values = cols25(genus_nb_hala5))+
+  facet_grid(~year, scale="free")+
+  labs(title="OTU Genus abundance (nb of reads) by cutting treatment",subtitle = "Halasen_P5")+
+  guides(fill=guide_legend(title="Genus"))
+hala5_ecm_ggplot2
+```
+```{r OTUs distribution}
+otu_nb_hala5 <- as.factor(hala5_ecm@tax_table[,6]) %>% droplevels() %>% levels() %>% length()
+hala5_ecm_ggplot3 <- phyloseq::plot_bar(as_binary_otu_table(hala5_ecm), x = "treatment")
+hala5_ecm_ggplot3 <- ggplot(hala5_ecm_ggplot3$data, aes(fill= fct_reorder(as.factor(OTU_ID), Abundance), x=treatment, y = Abundance))+
+  geom_bar(stat="identity", position = "stack") +
+  scale_fill_manual(values = funky(otu_nb_hala5))+
+  facet_grid(~year, scale="free")+
+  labs(title="OTU Genus count (0;1) by cutting treatment",subtitle = "Halasen_P5")+
+  guides(fill=guide_legend(title="Genus"))
+hala5_ecm_ggplot3
+
+hala5_ecm_ggplot4 <- phyloseq::plot_bar(hala5_ecm, x = "treatment") 
+hala5_ecm_ggplot4 <- ggplot(hala5_ecm_ggplot4$data, aes(fill= fct_reorder(as.factor(OTU_ID), Abundance), x=treatment, y = Abundance))+
+  geom_bar(stat="identity", position = "stack") +
+  scale_fill_manual(values = funky(otu_nb_hala5))+
+  facet_grid(~year, scale="free")+
+  labs(title="OTU abundance (nb of reads) by cutting treatment",subtitle = "Halasen_P5")+
+  guides(fill=guide_legend(title="Genus"))
+hala5_ecm_ggplot4
+```
+```{r hill OTUs}
+hala5_hill_treatment <- hill_pq(physeq = hala5_ecm_t, variable = "treatment", color_fac = NA, letters = F) 
+hala5_hill0 <- hala5_hill_treatment[[1]]+ 
+  labs(title="Hill 0 : apha diversity of ", subtitle="Halasen5")+
+  coord_cartesian(xlim=c(0,16))+
+  scale_x_continuous(name="Hill_0", breaks=seq(0,16,by=2))+
+  scale_y_continuous(name="treatment", breaks=c(1,2,3))+
+  scale_color_manual(values = c("forest" = "darkgreen",
+                                "thinned" = "orange",
+                                "clearcut" = "darkred"))+
+  theme(axis.text.x=element_text(color="coral4", size=8, angle=0))
+hala5_hill0
+
+hala5_hill1 <- hala5_hill_treatment[[2]]+ 
+  labs(title="Hill 1 : treatment", subtitle="Halasen5")+
+  coord_cartesian(xlim=c(0,12))+
+  scale_x_continuous(name="Hill_1", breaks=seq(0,12,by=2))+
+  scale_y_continuous(name="treatment", breaks=c(1,2,3))+
+  scale_color_manual(values = c("forest" = "darkgreen",
+                                "thinned" = "orange",
+                                "clearcut" = "darkred"))+
+  theme(axis.text.x=element_text(color="coral4", size=8, angle=0))
+
+hala5_hill2 <- hala5_hill_treatment[[3]]+ 
+  labs(title="Hill 2 : treatment", subtitle="Halasen5")+
+  coord_cartesian(xlim=c(0,10))+
+  scale_x_continuous(name="Hill_2", breaks=seq(0,10,by=2))+
+  scale_y_continuous(name="treatment", breaks=c(1,2,3))+
+  scale_color_manual(values = c("forest" = "darkgreen",
+                                "thinned" = "orange",
+                                "clearcut" = "darkred"))+
+  theme(axis.text.x=element_text(color="coral4", size=8, angle=0))
+
+hala5_hill_treatment[[4]]
+hala5_hill_treatment[[4]] # TukeyHSD test
+```
+
+## 4.2.2 multivariate analysis
+```{r ordination}
+hala5_ecm_ordi_mdsjaSC  <- ordinate(hala5_ecm, method = "MDS", dist="bray")
+hala5_ecm_ordi_mdsjaSC  <- plot_ordination(hala5_ecm, hala5_ecm_ordi_mdsjaSC, type="samples", color="treatment",label="sample_id")+
+  geom_point(size=2)+
+  # color and elipse
+  scale_color_manual(values = c("clearcut" = "darkred",
+                                "thinned" = "orange",
+                                "forest" = "darkgreen"))+
+  stat_ellipse(type="t", level=0.70)+
+  # legend
+  guides(color=guide_legend(title="treatment"))+
+  ggtitle(label = "MDS of samples from Halasen_5P",subtitle = "abundance")
+hala5_ecm_ordi_mdsjaSC
+
+hala5_ecm_ordi_mdsbray  <- ordinate(as_binary_otu_table(hala5_ecm), method = "MDS", dist="jaSCard")
+hala5_ecm_ordi_mdsbray  <-plot_ordination(hala5_ecm, hala5_ecm_ordi_mdsbray , type="samples", color="treatment",label="sample_id")+
+  geom_point(size=2)+
+  # color and elipse
+    scale_color_manual(values = c("clearcut" = "darkred",
+                                "thinned" = "orange",
+                                "forest" = "darkgreen"))+
+  stat_ellipse(type="t", level=0.70)+
+  # legend
+  guides(color=guide_legend(title="treatment"))+
+  ggtitle(label = "MDS of samples from Halasen_5P",subtitle = "abundance")
+
+hala5_ecm_ordi1 <- ordinate(as_binary_otu_table(hala5_ecm), method = "NMDS", dist="jaSCard",k=20)
+plot_ordination(hala5_ecm, hala5_ecm_ordi1, type="samples", color="treatment",label="sample_id")+
+  geom_point(size=2)+
+  # color and elipse
+    scale_color_manual(values = c("clearcut" = "darkred",
+                                "thinned" = "orange",
+                                "forest" = "darkgreen"))+
+  stat_ellipse(type="t", level=0.70)+
+  # legend
+  guides(color=guide_legend(title="treatment"))+
+  ggtitle(label = "MDS of samples from Halasen_5P",subtitle = "abundance")
+
+hala5_ecm_ordi_phyl1 <- ordinate(hala5_ecm, method = "MDS", dist="bray")
+hala5_ecm_ordi_phyl1 <- plot_ordination(hala5_ecm, hala5_ecm_ordi_phyl1, type="taxa", color="Order", shape="Phylum")+
+  geom_point(size=2)+
+  # color and elipse
+  scale_color_manual(values =cols25(10))+
+  stat_ellipse(type="t", level=0.70)+
+  # legend
+  guides(color=guide_legend(title="position from SC"))+
+  ggtitle(label = "MDS of samples from Halasen_edge by year",subtitle = "abundance (bray-curtis distance)")
+hala5_ecm_ordi_phyl1
+```
+# *5 FANGAMON STUDY: randomly distributed retention trees*
+## 5.1 design and sampling
+```{r overview }
+colnames(fanga_sam)
+summary(fanga_sam[,c(2,5:8)])
+summary(fanga_sam$plot)
+table(fanga_sam$plot,fanga_sam$treatment)
+
+# nb genus
+colnames(fanga_ecm@tax_table)
+as.factor(fanga_ecm@tax_table[,5]) %>% droplevels() %>% levels()
+genus_nb_fanga <- as.factor(fanga_ecm@tax_table[,5]) %>% droplevels() %>% levels() %>% length()
+genus_nb_fanga # 15 genus
+
+```
+## 5.2.1 bivariate analysis
+```{r rarecurve}
+fanga_rrcurve0 <- phyloseq.extended::ggrare(fanga_grp_12, step = 10, color = "treatment",plot=F, se=T)+ facet_wrap(~year)+
+  labs(x = "Group size",
+       y =  "OTU richness",
+       title = "rarefaction curves by treatment",
+       color = "Treatment")+
+  guides(fill = F)+ # Suppressing the filling (standard error) legend 
+  scale_color_manual(values = c("clearcut" = "darkred",
+                                "forest" = "darkgreen",
+                                "thinned_burn" = "grey4",
+                                "thinned_no_burn" = "orange"))+
+  scale_fill_manual(values = c("clearcut" = "darkred",
+                                "forest" = "darkgreen",
+                                "thinned_burn" = "grey4",
+                                "thinned_no_burn" = "orange"))
+fanga_rrcurve0
+
+fanga_rrcurve1 <- phyloseq.extended::ggrare(fanga_grp_18, step = 10, color = "treatment",plot=F, se=T)+ facet_wrap(~year)+
+  labs(x = "Group size",
+       y =  "OTU richness",
+       title = "rarefaction curves by treatment",
+       color = "Treatment")+
+  guides(fill = F)+ # Suppressing the filling (standard error) legend 
+  scale_color_manual(values = c("clearcut" = "darkred",
+                                "forest" = "darkgreen",
+                                "thinned_burn" = "grey4",
+                                "thinned_no_burn" = "orange"))+
+  scale_fill_manual(values = c("clearcut" = "darkred",
+                                "forest" = "darkgreen",
+                                "thinned_burn" = "grey4",
+                                "thinned_no_burn" = "orange"))
+fanga_rrcurve1
+```
+```{r circle graph: genus distribution among treatments}
+circle_fanga_ecm <- circle_pq(physeq = fanga_ecm, 
+                              fact = "treatment", 
+                              taxa = "Genus", 
+                              min_prop_mod=0.001,
+                              min_prop_tax=0.02,
+                              row_col = c("clearcut" = "darkred",
+                                "forest" = "darkgreen",
+                                "thinned_burn" = "grey4",
+                                "thinned_no_burn" = "orange"),
+                              grid_col= 1,
+                              add_nb_seq = T)
+```
+```{r genus distribution}
+genus_nb_fanga <- as.factor(fanga_ecm@tax_table[,5]) %>% droplevels() %>% levels() %>% length()
+fanga_ecm_ggplot1 <- phyloseq::plot_bar(as_binary_otu_table(fanga_ecm), x = "treatment") 
+fanga_ecm_ggplot1 <- ggplot(fanga_ecm_ggplot1$data, aes(fill= fct_reorder(as.factor(Genus), Abundance), x=treatment, y = Abundance))+
+  geom_bar(stat="identity", position = "stack") +
+  facet_grid(~year, scale="free")+
+  scale_fill_manual(values = cols25(genus_nb_fanga))+
+  facet_grid(~year, scale="free")+
+  labs(title="OTU Genus count (0;1) by cutting treatment",subtitle = "Fangamon")+
+  guides(fill=guide_legend(title="Genus"))
+fanga_ecm_ggplot1
+
+fanga_ecm_ggplot2 <- phyloseq::plot_bar(fanga_ecm, x = "treatment") 
+fanga_ecm_ggplot2 <- ggplot(fanga_ecm_ggplot2$data, aes(fill= fct_reorder(as.factor(Genus), Abundance), x=treatment, y = Abundance))+
+  geom_bar(stat="identity", position = "stack") +
+  facet_grid(~year, scale="free")+
+  scale_fill_manual(values = cols25(genus_nb_fanga))+
+  facet_grid(~year, scale="free")+
+  labs(title="OTU Genus abundance (nb of reads) by cutting treatment",subtitle = "Fangamon")+
+  guides(fill=guide_legend(title="Genus"))
+fanga_ecm_ggplot2
+# position = fill -> relative abundance 
+```
+```{r OTU distribution}
+otu_nb_fanga <- as.factor(fanga_ecm@tax_table[,6]) %>% droplevels() %>% levels() %>% length()
+fanga_ecm_ggplot3 <- phyloseq::plot_bar(as_binary_otu_table(fanga_ecm), x = "treatment") 
+fanga_ecm_ggplot3 <- ggplot(fanga_ecm_ggplot3$data, aes(fill= fct_reorder(as.factor(OTU_ID), Abundance), x=treatment, y = Abundance))+
+  geom_bar(stat="identity", position = "stack") +
+  facet_grid(~year, scale="free")+
+  scale_fill_manual(values = funky(otu_nb_fanga))+
+  facet_grid(~year, scale="free")+
+  labs(title="OTU Genus count (0;1) by cutting treatment",subtitle = "Fangamon")+
+  guides(fill=guide_legend(title="Genus"))
+fanga_ecm_ggplot3
+
+fanga_ecm_ggplot4 <- phyloseq::plot_bar(fanga_ecm, x = "treatment") 
+fanga_ecm_ggplot4 <- ggplot(fanga_ecm_ggplot4$data, aes(fill= fct_reorder(as.factor(OTU_ID), Abundance), x=treatment, y = Abundance))+
+  geom_bar(stat="identity", position = "stack") +
+  facet_grid(~year, scale="free")+
+  scale_fill_manual(values = funky(otu_nb_fanga))+
+  facet_grid(~year, scale="free")+
+  labs(title="OTU Genus abundance (nb of reads) by cutting treatment",subtitle = "Fangamon")+
+  guides(fill=guide_legend(title="Genus"))
+fanga_ecm_ggplot4
+# position = fill -> relative abundance 
+```
+```{r hill fanga}
+fanga_hill_treatment <- hill_pq(physeq = fanga_ecm_t,
+                                variable = "treatment", 
+                                color_fac = NA, 
+                                letters = F) 
+
+fanga_hill0 <- fanga_hill_treatment[[1]]+ 
+  labs(title="Hill 0 : treatment", subtitle="Fangamon")+
+  coord_cartesian(xlim=c(0,16))+
+  scale_x_continuous(name="Hill_0", breaks=seq(0,16,by=2))+
+  scale_y_continuous(name="treatment", breaks=c(1,2,3))+
+  scale_color_manual(values = c("clearcut" = "darkred",
+                                "forest" = "darkgreen",
+                                "thinned_burn" = "grey4",
+                                "thinned_no_burn" = "orange"))+
+  theme(axis.text.x=element_text(color="coral4", size=8, angle=0))
+fanga_hill0
+
+fanga_hill1 <- fanga_hill_treatment[[2]]+ 
+  labs(title="Hill 1 : treatment", subtitle="Fangamon")+
+  coord_cartesian(xlim=c(0,12))+
+  scale_x_continuous(name="Hill_1", breaks=seq(0,12,by=2))+
+  scale_y_continuous(name="treatment", breaks=c(1,2,3))+
+  scale_color_manual(values = c("clearcut" = "darkred",
+                                "forest" = "darkgreen",
+                                "thinned_burn" = "grey4",
+                                "thinned_no_burn" = "orange"))+
+  theme(axis.text.x=element_text(color="coral4", size=8, angle=0))
+
+fanga_hill2 <- fanga_hill_treatment[[3]]+ 
+  labs(title="Hill 2 : treatment", subtitle="Fangamon")+
+  coord_cartesian(xlim=c(0,10))+
+  scale_x_continuous(name="Hill_2", breaks=seq(0,10,by=2))+
+  scale_y_continuous(name="treatment", breaks=c(1,2,3))+  
+  scale_color_manual(values = c("clearcut" = "darkred",
+                                "forest" = "darkgreen",
+                                "thinned_burn" = "grey4",
+                                "thinned_no_burn" = "orange"))+
+  theme(axis.text.x=element_text(color="coral4", size=8, angle=0))
+
+fanga_hill_treatment[[4]]
+fanga_hill_treatment[[4]] # TukeyHSD test
+```
+```{r trying understand difference between boolean and relative abundance}
+fanga_ecm_only_SC <- subset_samples(fanga_ecm, fanga_ecm@sam_data$treatment=="clearcut") %>% clean_physeq(remove_empty_samples = T,remove_empty_taxa = T)
+
+print(fanga_ecm_only_SC@otu_table)
+which(fanga_ecm_only_SC@otu_table>200,arr.ind = T) %>% rownames() 
+fanga_ecm_only_SC@tax_table[c("c10", "c21"),6] # 2 super abundant species 
+```
+```{r maybe a contamination for a sample?}
+fanga_ecm_only_SC_2012 <- subset_samples(fanga_ecm, fanga_ecm@sam_data$year=="2012" & fanga_ecm@sam_data$treatment=="clearcut") %>% clean_physeq(remove_empty_samples = T,remove_empty_taxa = T)
+print(fanga_ecm_only_SC_2012@sam_data)
+print(fanga_ecm_only_SC_2012@otu_table) # c10 in both samples, c21 in another different one... no specific contamination it seems
+
+fanga_ecm_excl_samples <- subset_samples(fanga_ecm, !fanga_ecm@sam_data$sample_id %in% c("s152","s45")) %>% clean_physeq(remove_empty_samples = T,remove_empty_taxa = T)
+
+fanga_ecm_ggplot3 <- phyloseq::plot_bar(as_binary_otu_table(fanga_ecm_excl_samples), x = "treatment") 
+ggplot(fanga_ecm_ggplot3$data, aes(fill= fct_reorder(as.factor(Genus), Abundance), x=treatment, y = Abundance))+
+  geom_bar(stat="identity", position = "stack") +
+  facet_grid(~year, scale="free")+
+  scale_fill_manual(values = cols25(genus_nb_fanga))+
+  facet_grid(~year, scale="free")+
+  labs(title="OTU Genus count (0;1) by cutting treatment",subtitle = "Fangamon- exlcuded s152,s45 samples")+
+  guides(fill=guide_legend(title="Genus"))
+
+fanga_ecm_ggplot2 <- phyloseq::plot_bar(fanga_ecm_excl_samples, x = "treatment") 
+ggplot(fanga_ecm_ggplot2$data, aes(fill= fct_reorder(as.factor(Genus), Abundance), x=treatment, y = Abundance))+
+  geom_bar(stat="identity", position = "stack") +
+  facet_grid(~year, scale="free")+
+  labs(title="", subtitle="")  
+```
+## 5.2.2 multivariate analysis
+```{r ordination}
+fanga_ecm_ordi_mdsjaSC <- ordinate(as_binary_otu_table(fanga_ecm), method = "MDS", dist="jaSCard")
+fanga_ecm_ordi_mdsjaSC <- plot_ordination(fanga_ecm, fanga_ecm_ordi_mdsjaSC, type="samples", color="treatment",label="sample_id")+
+  geom_point(size=2)+
+  facet_wrap(~year)+
+  # color and elipse
+  scale_color_manual(values = c("clearcut" = "darkred",
+                              "forest" = "darkgreen",
+                              "thinned_burn" = "grey4",
+                              "thinned_no_burn" = "orange"))+
+  stat_ellipse(type="t", level=0.70)+
+  # legend
+  guides(color=guide_legend(title="position from SC"))+
+  ggtitle(label = "MDS of samples from fangamon by year", subtitle="presence-absence (jaSCard distance)")
+fanga_ecm_ordi_mdsjaSC
+
+fanga_ecm_ordi_mdsbray <- ordinate(fanga_ecm, method = "MDS", dist="bray")
+fanga_ecm_ordi_mdsbray <- plot_ordination(fanga_ecm, fanga_ecm_ordi_mdsbray, type="samples", color="treatment",label="sample_id")+
+  geom_point(size=2)+
+  facet_wrap(~year)+
+  # color and elipse
+  scale_color_manual(values = c("clearcut" = "darkred",
+                              "forest" = "darkgreen",
+                              "thinned_burn" = "grey4",
+                              "thinned_no_burn" = "orange"))+
+  stat_ellipse(type="t", level=0.70)+
+  # legend
+  guides(color=guide_legend(title="position from SC"))+
+  ggtitle(label = "MDS of samples from fangamon by year",subtitle = "abundance (bray-curtis distance)")
+```
+
+# *7 EXPORT FILES*
+```{r manuscript}
+getwd()
+setwd("H:/REDACTION/FIGURES/FIGURES_R")
+
+## export tables as csv
+write.csv(varsum, file = 'varsum.csv')
+
+#### EXPORT 07-09-23
+plot_list <- list(bxplt_rich, bxplt_relat, bray_fanga12, bray_fanga18, bray_hala12, bray_hala18, bray_hala5p, htmap_fanga, htmap_hala, htmap_hala5p)
+
+output_dir <- "C:/Users/Utilisateur/OneDrive/STAGE-2023_SUEDE/DATA/PAPER_RESULTS/"
+
+for (i in 1:length(plot_list)) {
+  plot_file <- paste0(output_dir, "plot_", i, ".jpg")
+  ggsave(plot_list[[i]], filename = plot_file, width = 8, height = 6)
+}
+```
+
